@@ -1,0 +1,54 @@
+import { Sequelize } from "sequelize";
+import db from "../config/db.js"
+import Grados from "./GradosModel.js";
+
+const { DataTypes } = Sequelize;
+
+const Alumnos = db.define('alumnos', {
+     id: { 
+        type: DataTypes.INTEGER.UNSIGNED, 
+        primaryKey: true, 
+        autoIncrement: true 
+    },
+    uuid: {
+        type: DataTypes.STRING,
+        defaultValue: DataTypes.UUIDV4,
+        allowNull: false,
+        validate: {
+            notEmpty: true
+        }
+    },
+    nombre: {
+         type: DataTypes.STRING, 
+         allowNull: false,
+         
+        },
+    apellido: {
+         type: DataTypes.STRING, 
+         allowNull: false,  
+        },
+    matricula: {
+         type: DataTypes.STRING, 
+         allowNull: false,
+            unique: true
+        },
+    tutor:{
+            type: DataTypes.STRING,
+            allowNull: false,
+        },
+
+        gradoId:{
+            type: DataTypes.INTEGER,
+            allowNull: false,
+            validate: {
+                notEmpty:true
+            }
+        }
+    
+    }, {
+        freezeTableName: true
+    });    
+   
+   export default  Alumnos;
+
+    

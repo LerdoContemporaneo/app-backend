@@ -1,0 +1,60 @@
+###
+GET http://localhost:3000/users
+
+
+### Crear
+POST http://localhost:3000/users
+Content-Type: application/json
+
+{
+  "name": "Alumno Test",
+  "email": "alumno@escuela.test",
+  "password": "123456",
+  "confPassword": "123456",
+  "role": "alumno"
+}
+
+
+###
+GET http://localhost:3000/users/uuid
+
+
+###
+POST http://localhost:3000/users/uuid
+Content-Type: application/json
+
+{
+  "name": "Alumno Test",
+  "email": "alumno@escuela.test",
+  "password": "123456",
+  "confPassword": "123456",
+  "role": "alumno"
+}
+
+
+
+###
+//Eliminar
+DELETE http://localhost:3000/users/uuid
+
+
+###
+//Login
+POST http://localhost:3000/login
+Content-Type: application/json
+
+{
+ "email": "admin@escuela.test",
+  "password": "123456"
+}
+
+
+
+###
+//Datos del usuario logueado
+GET http://localhost:3000/me
+
+
+###
+//cerrar sesión
+DELETE http://localhost:3000/logout
