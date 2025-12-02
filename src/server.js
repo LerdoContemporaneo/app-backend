@@ -17,6 +17,8 @@ dotenv.config();
 
 const app = express();
 
+app.set("trust proxy", 1);
+
 const SequelizeStore = connectSessionSequelize(session.Store);
 
 const store = new SequelizeStore({
@@ -32,11 +34,11 @@ app.use(session({
     resave: false,
     saveUninitialized: true,
     store: store,
-    cookie: { secure: 'auto' }
+    cookie: { secure: true, sameSite: 'none', httpOnly: true, maxAge: 24 * 60 * 60 * 1000 }
 }));
 
 app.use(cors({
-  origin: ["https://lerdo-front.vercel.app"], // sin slash final
+  origin: ["https://lerdo-front.vercel.app", "http://localhost:3000"], // sin slash final
   credentials: true,
   methods: ["GET","POST","PATCH","PUT","DELETE","OPTIONS"],
   allowedHeaders: ["Content-Type","Authorization"],
