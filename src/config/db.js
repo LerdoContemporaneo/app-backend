@@ -1,18 +1,26 @@
 import { Sequelize } from "sequelize";
 import dotenv from "dotenv";
-dotenv.config();
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+
+dotenv.config({ path: path.resolve(__dirname, '../../.env') }); 
+
 
 const {
   DB_HOST,
   DB_USER,
   DB_PASSWORD,
-  DB_PASS,   // por si en algún lado la llamas así
+  DB_PASS,  
   DB_NAME,
   DB_PORT,
 } = process.env;
 
 const db = new Sequelize(DB_NAME, DB_USER, DB_PASSWORD || DB_PASS, {
-  host: DB_HOST,
+  host: DB_HOST, 
   port: DB_PORT ? Number(DB_PORT) : 3306,
   dialect: "mysql",
   logging: false,
@@ -24,6 +32,7 @@ const db = new Sequelize(DB_NAME, DB_USER, DB_PASSWORD || DB_PASS, {
   dialectOptions: {
     dateStrings: true,
     typeCast: true,
+    
   },
 });
 

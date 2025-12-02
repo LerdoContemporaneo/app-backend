@@ -58,3 +58,14 @@ GET http://localhost:3000/me
 ###
 //cerrar sesión
 DELETE http://localhost:3000/logout
+
+
+### Login
+POST https://app-backend-khaki-one.vercel.app/login
+Content-Type: application/json
+Origin: https://lerdo-front.vercel.app
+
+{
+  "email": "admin@escuela.test",
+  "password": "123456"
+}
