@@ -38,7 +38,7 @@ app.use(session({
 }));
 
 app.use(cors({
-  origin: ["https://lerdo-front.vercel.app", "http://localhost:3000"], // sin slash final
+  origin: ["https://lerdo-front.vercel.app", "http://localhost:3000", "http://localhost:3001" ], // sin slash final
   credentials: true,
   methods: ["GET","POST","PATCH","PUT","DELETE","OPTIONS"],
   allowedHeaders: ["Content-Type","Authorization"],
