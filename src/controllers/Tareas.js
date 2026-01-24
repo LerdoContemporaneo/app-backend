@@ -58,6 +58,59 @@ export const getTareas = async (req, res) => {
   }
 };
 
+export const getTareasById = async (req, res) => {
+  try {
+    const { role, userId } = req;
+
+    const tarea = await Tareas.findOne({
+      where: { uuid: req.params.id },
+      attributes: [
+        "id",
+        "uuid",
+        "titulo",
+        "descripcion",
+        "fechaAsignacion",
+        "fechaEntrega",
+        "alumnoId",
+      ],
+      include: [
+        {
+          model: Alumnos,
+          attributes: ["id", "uuid", "nombre", "apellido", "matricula", "userId", "gradoId"],
+          include: [
+            {
+              model: Grados,
+              attributes: ["id", "maestroId"], 
+            },
+          ],
+        },
+      ],
+    });
+
+    if (!tarea) return res.status(404).json({ msg: "Tarea no encontrada" });
+
+    if (role === "alumno") {
+      if (tarea.alumno.userId !== userId) {
+        return res.status(403).json({ msg: "Acceso denegado: No puedes ver tareas de otros alumnos" });
+      }
+    }
+
+    
+    if (role === "maestro") {
+    
+      if (!tarea.alumno.grado || tarea.alumno.grado.maestroId !== userId) {
+        return res.status(403).json({ msg: "Acceso denegado: El alumno de esta tarea no pertenece a tus grados" });
+      }
+    }
+
+  
+
+    res.status(200).json(tarea);
+  } catch (error) {
+    res.status(500).json({ msg: error.message });
+  }
+};
+
 export const createTareas = async (req, res) => {
   const { titulo, descripcion, fechaAsignacion, fechaEntrega, alumnoId } =
     req.body;
