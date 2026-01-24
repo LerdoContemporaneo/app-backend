@@ -1,6 +1,6 @@
 import { Sequelize } from "sequelize";
 import db from "../config/db.js";
-import Users from "./UsersModel.js"; // Importa Users si es necesario para referencias, aunque Sequelize lo maneja en asociaciones
+
 
 const { DataTypes } = Sequelize;
 
@@ -28,20 +28,8 @@ const Alumnos = db.define('alumnos', {
         type: DataTypes.STRING,
         allowNull: false
     },
-    gradoId: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        validate: { notEmpty: true }
-    },
-    userId: {
-        type: DataTypes.INTEGER,
-        allowNull: false, 
-        unique: true, 
-        references: {
-            model: 'users', 
-            key: 'id'
-        }
-    }
+  
+   
 }, {
     freezeTableName: true,
     timestamps: true,

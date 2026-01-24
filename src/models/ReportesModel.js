@@ -28,18 +28,9 @@ const Reportes = db.define(
       type: DataTypes.TEXT,
       allowNull: false,
     },
-    alumnoId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: false },
-    maestroId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
-    gradoId: { type: DataTypes.INTEGER.UNSIGNED, allowNull: true },
   },
   {
     freezeTableName: true,
-    timestamps: true,
-    indexes: [
-      { fields: ["alumnoId"] },
-      { fields: ["maestroId"] },
-      { fields: ["gradoId"] },
-    ],
   }
 );
 

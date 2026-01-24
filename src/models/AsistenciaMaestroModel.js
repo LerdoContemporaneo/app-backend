@@ -32,13 +32,7 @@ const AsistenciaMaestro = db.define(
       allowNull: false,
       defaultValue: "Presente",
     },
-    maestroId: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      validate: {
-        notEmpty: true,
-      },
-    },
+   
   },
   {
     freezeTableName: true,

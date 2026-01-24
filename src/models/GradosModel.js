@@ -15,13 +15,7 @@ const Grados = db.define('grados', {
         allowNull: false,
         unique: true
     },
-    maestroId: { 
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        validate: {
-            notEmpty: true
-        } 
-    },
+
 }, {
     freezeTableName: true,
     timestamps: true,

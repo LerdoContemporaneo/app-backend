@@ -10,39 +10,37 @@ import Reportes from "./ReportesModel.js";
 import Tareas from "./TareasModel.js";
 
 // --- 1. Relación Usuario (Login) ↔ Perfil Alumno ---
-// Un User puede tener un perfil de Alumno (si su rol es alumno)
 Users.hasOne(Alumnos, { foreignKey: "userId" });
-Alumnos.belongsTo(Users, { foreignKey: "userId" });
+// CORRECCIÓN: onDelete: 'CASCADE' para que coincida con allowNull: false
+Alumnos.belongsTo(Users, { foreignKey: "userId", onDelete: 'CASCADE' });
 
 // --- 2. Relación Usuario (Maestro) ↔ Grados ---
-// Un Maestro (User) tiene muchos grados a cargo
 Users.hasMany(Grados, { foreignKey: "maestroId" });
-Grados.belongsTo(Users, { foreignKey: "maestroId", as: "maestro" });
+// Aquí 'SET NULL' está bien porque un grado puede quedarse sin maestro temporalmente
+Grados.belongsTo(Users, { foreignKey: "maestroId", as: "maestro", onDelete: 'SET NULL' });
 
 // --- 3. Grados ↔ Alumnos ---
 Grados.hasMany(Alumnos, { foreignKey: "gradoId" });
-Alumnos.belongsTo(Grados, { foreignKey: "gradoId" });
+// CORRECCIÓN: onDelete: 'CASCADE' o 'RESTRICT'. Usaremos CASCADE para evitar el error 150.
+Alumnos.belongsTo(Grados, { foreignKey: "gradoId", onDelete: 'CASCADE' });
 
 // --- 4. Maestros ↔ AsistenciaMaestro ---
 Users.hasMany(AsistenciaMaestro, { foreignKey: "maestroId" });
-AsistenciaMaestro.belongsTo(Users, { foreignKey: "maestroId" });
+AsistenciaMaestro.belongsTo(Users, { foreignKey: "maestroId", onDelete: 'CASCADE' });
 
-// --- 5. Alumnos ↔ Tablas relacionadas (Data) ---
-// Asistencia
+// --- 5. Alumnos ↔ Tablas de Datos ---
+// Si borras un alumno, se borran sus datos (CASCADE es lo normal aquí)
 Alumnos.hasMany(Asistencia, { foreignKey: "alumnoId" });
-Asistencia.belongsTo(Alumnos, { foreignKey: "alumnoId" });
+Asistencia.belongsTo(Alumnos, { foreignKey: "alumnoId", onDelete: 'CASCADE' });
 
-// Incidencias
 Alumnos.hasMany(Incidencia, { foreignKey: "alumnoId" });
-Incidencia.belongsTo(Alumnos, { foreignKey: "alumnoId" });
+Incidencia.belongsTo(Alumnos, { foreignKey: "alumnoId", onDelete: 'CASCADE' });
 
-// Reportes
 Alumnos.hasMany(Reportes, { foreignKey: "alumnoId" });
-Reportes.belongsTo(Alumnos, { foreignKey: "alumnoId" });
+Reportes.belongsTo(Alumnos, { foreignKey: "alumnoId", onDelete: 'CASCADE' });
 
-// Tareas
 Alumnos.hasMany(Tareas, { foreignKey: "alumnoId" });
-Tareas.belongsTo(Alumnos, { foreignKey: "alumnoId" });
+Tareas.belongsTo(Alumnos, { foreignKey: "alumnoId", onDelete: 'CASCADE' });
 
 export {
   Users,
