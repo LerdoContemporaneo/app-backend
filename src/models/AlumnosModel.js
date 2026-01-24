@@ -1,6 +1,6 @@
 import { Sequelize } from "sequelize";
 import db from "../config/db.js";
-import Users from "./UserModel.js"; // Importa Users si es necesario para referencias, aunque Sequelize lo maneja en asociaciones
+import Users from "./UsersModel.js"; // Importa Users si es necesario para referencias, aunque Sequelize lo maneja en asociaciones
 
 const { DataTypes } = Sequelize;
 
