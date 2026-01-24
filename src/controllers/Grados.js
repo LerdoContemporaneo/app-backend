@@ -1,11 +1,16 @@
-import Grados from "../models/GradosModel.js";
-import Users from "../models/UsersModel.js";
+import { Grados, Users } from "../models/index.js"; 
 
 export const getGrados = async (req, res) => {
   try {
     const lista = await Grados.findAll({
       attributes: ["id", "uuid", "nombre", "maestroId"],
-      include: [{ model: Users, as: "maestro", attributes: ["id", "uuid", "name", "email", "role"] }],
+      include: [
+        { 
+            model: Users, 
+            as: "maestro", 
+            attributes: ["id", "uuid", "name", "email", "role"] 
+        }
+      ],
       order: [["id", "DESC"]],
     });
     res.status(200).json(lista);
@@ -16,13 +21,13 @@ export const getGrados = async (req, res) => {
 
 export const getGradosById = async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ msg: "ID inválido" });
-
-    const grado = await Grados.findByPk(id, {
+    // 2. CORRECCIÓN DE UUID: No uses Number(), usa el string directo
+    const grado = await Grados.findOne({
+      where: { uuid: req.params.id }, // Buscamos por UUID
       attributes: ["id", "uuid", "nombre", "maestroId"],
       include: [{ model: Users, as: "maestro", attributes: ["id", "uuid", "name", "email", "role"] }],
     });
+    
     if (!grado) return res.status(404).json({ msg: "Grado no encontrado" });
     res.status(200).json(grado);
   } catch (error) {
@@ -45,14 +50,14 @@ export const createGrados = async (req, res) => {
 
 export const updateGrados = async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ msg: "ID inválido" });
-
-    const grado = await Grados.findByPk(id);
+    // 1. Buscar por UUID para obtener el ID interno
+    const grado = await Grados.findOne({ where: { uuid: req.params.id }});
     if (!grado) return res.status(404).json({ msg: "Grado no encontrado" });
 
     const { nombre, maestroId } = req.body;
-    await Grados.update({ nombre, maestroId }, { where: { id } });
+    
+    // 2. Actualizar usando el ID numérico interno
+    await Grados.update({ nombre, maestroId }, { where: { id: grado.id } });
     res.status(200).json({ msg: "Grado actualizado correctamente" });
   } catch (error) {
     res.status(500).json({ msg: error.message });
@@ -61,14 +66,11 @@ export const updateGrados = async (req, res) => {
 
 export const deleteGrados = async (req, res) => {
   try {
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ msg: "ID inválido" });
-
-    const grado = await Grados.findByPk(id);
+    const grado = await Grados.findOne({ where: { uuid: req.params.id }});
     if (!grado) return res.status(404).json({ msg: "Grado no encontrado" });
 
-    await Grados.destroy({ where: { id } });
-    res.status(204).send();
+    await Grados.destroy({ where: { id: grado.id } });
+    res.status(200).json({ msg: "Grado eliminado correctamente" });
   } catch (error) {
     res.status(500).json({ msg: error.message });
   }

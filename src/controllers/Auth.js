@@ -2,6 +2,7 @@ import User from "../models/UsersModel.js";
 import argon2 from "argon2";
 
 export const Login = async (req, res) => {
+  try {
   const user = await User.findOne({
     where: {   
         email: req.body.email 
@@ -15,7 +16,16 @@ export const Login = async (req, res) => {
     const name = user.name;
     const email = user.email;
     const role = user.role;
-    res.status(200).json({ uuid, name, email, role });
+
+    req.session.save((err) => {
+        if (err) {
+            return res.status(500).json({ msg: "Error al guardar la sesión" });
+        }
+        res.status(200).json({ uuid, name, email, role });
+    });
+  } catch (error) {
+    res.status(500).json({ msg: error.message });
+  }
 };
 
 
