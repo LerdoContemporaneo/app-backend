@@ -1,6 +1,8 @@
 node_modules/
 .env
 .env.*
+-rest
+.rest.*
 npm-debug.log*
 yarn-error.log*
 dist/

@@ -1,72 +1,58 @@
-// src/models/index.js
 import db from "../config/db.js";
 
-
-import Users from "./UsersModel.js";
-import Grados from "./GradosModel.js";
+import Users from "./UserModel.js";
 import Alumnos from "./AlumnosModel.js";
+import Grados from "./GradosModel.js";
 import Asistencia from "./AsistenciaModel.js";
-import AsistenciaMaestro from "./AsistenciaMaestroModel.js";
+import AsistenciaMaestro from "./AsistenciaMaestro.js";
 import Incidencia from "./IncidenciaModel.js";
 import Reportes from "./ReportesModel.js";
+import Tareas from "./TareasModel.js";
 
+// --- 1. Relación Usuario (Login) ↔ Perfil Alumno ---
+// Un User puede tener un perfil de Alumno (si su rol es alumno)
+Users.hasOne(Alumnos, { foreignKey: "userId" });
+Alumnos.belongsTo(Users, { foreignKey: "userId" });
 
-function applyAssociations() {
-  // GRADOS ⇄ USERS (un maestro por grado)
-  Users.hasMany(Grados, { as: "gradosQueImparte", foreignKey: "maestroId" });
-  Grados.belongsTo(Users, { as: "maestro", foreignKey: "maestroId" });
+// --- 2. Relación Usuario (Maestro) ↔ Grados ---
+// Un Maestro (User) tiene muchos grados a cargo
+Users.hasMany(Grados, { foreignKey: "maestroId" });
+Grados.belongsTo(Users, { foreignKey: "maestroId", as: "maestro" });
 
-  // GRADOS ⇄ ALUMNOS (un grado tiene muchos alumnos / un alumno pertenece a un grado)
-  Grados.hasMany(Alumnos, { as: "alumnos", foreignKey: "gradoId" });
-  Alumnos.belongsTo(Grados, { as: "grado", foreignKey: "gradoId" });
+// --- 3. Grados ↔ Alumnos ---
+Grados.hasMany(Alumnos, { foreignKey: "gradoId" });
+Alumnos.belongsTo(Grados, { foreignKey: "gradoId" });
 
-  // ASISTENCIA (ALUMNOS) ⇄ ALUMNOS / GRADOS
-  Alumnos.hasMany(Asistencia, { as: "asistencias", foreignKey: "alumnoId" });
-  Asistencia.belongsTo(Alumnos, { as: "alumno", foreignKey: "alumnoId" });
+// --- 4. Maestros ↔ AsistenciaMaestro ---
+Users.hasMany(AsistenciaMaestro, { foreignKey: "maestroId" });
+AsistenciaMaestro.belongsTo(Users, { foreignKey: "maestroId" });
 
-  Grados.hasMany(Asistencia, { as: "asistenciasAlumnos", foreignKey: "gradoId" });
-  Asistencia.belongsTo(Grados, { as: "grado", foreignKey: "gradoId" });
+// --- 5. Alumnos ↔ Tablas relacionadas (Data) ---
+// Asistencia
+Alumnos.hasMany(Asistencia, { foreignKey: "alumnoId" });
+Asistencia.belongsTo(Alumnos, { foreignKey: "alumnoId" });
 
-  // ASISTENCIA (MAESTRO) ⇄ USERS
-  Users.hasMany(AsistenciaMaestro, { as: "asistenciasMaestro", foreignKey: "maestroId" });
-  AsistenciaMaestro.belongsTo(Users, { as: "maestro", foreignKey: "maestroId" });
+// Incidencias
+Alumnos.hasMany(Incidencia, { foreignKey: "alumnoId" });
+Incidencia.belongsTo(Alumnos, { foreignKey: "alumnoId" });
 
-  // INCIDENCIAS ⇄ ALUMNOS / USERS (opcional: quién la creó)
-  Alumnos.hasMany(Incidencia, { as: "incidencias", foreignKey: "alumnoId" });
-  Incidencia.belongsTo(Alumnos, { as: "alumno", foreignKey: "alumnoId" });
+// Reportes
+Alumnos.hasMany(Reportes, { foreignKey: "alumnoId" });
+Reportes.belongsTo(Alumnos, { foreignKey: "alumnoId" });
 
-  Users.hasMany(Incidencia, { as: "incidenciasCreadas", foreignKey: "creadoPorId" });
-  Incidencia.belongsTo(Users, { as: "creadoPor", foreignKey: "creadoPorId" });
+// Tareas
+Alumnos.hasMany(Tareas, { foreignKey: "alumnoId" });
+Tareas.belongsTo(Alumnos, { foreignKey: "alumnoId" });
 
-  // REPORTES ⇄ ALUMNOS / USERS / GRADOS
-  Alumnos.hasMany(Reportes, { as: "reportes", foreignKey: "alumnoId" });
-  Reportes.belongsTo(Alumnos, { as: "alumno", foreignKey: "alumnoId" });
-
-  Users.hasMany(Reportes, { as: "reportesComoMaestro", foreignKey: "maestroId" });
-  Reportes.belongsTo(Users, { as: "maestro", foreignKey: "maestroId" });
-
-  Grados.hasMany(Reportes, { as: "reportesDelGrado", foreignKey: "gradoId" });
-  Reportes.belongsTo(Grados, { as: "grado", foreignKey: "gradoId" });
-}
-
-/**
- * Sincroniza la base (en desarrollo). En producción usa migraciones.
- * @param {{force?: boolean, alter?: boolean}} options
- */
-export async function syncDB(options = { force: false, alter: false }) {
-  applyAssociations();
-  await db.sync(options);
-  // console.log("✅ DB sincronizada");
-}
-
-// Exporta la conexión y todos los modelos para usarlos en controladores/servicios
 export {
-  db,
   Users,
-  Grados,
   Alumnos,
+  Grados,
   Asistencia,
   AsistenciaMaestro,
   Incidencia,
   Reportes,
+  Tareas,
 };
+
+export default db;

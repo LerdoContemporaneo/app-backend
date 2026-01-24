@@ -1,18 +1,20 @@
 import express from 'express';
-import { 
-        getReportes,
-        getReportesById,
-        createReportes,
-        updateReportes,
-        deleteReportes
-} from "../controllers/Reportes.js"
+import { getReportes, 
+    getReportesById,
+    createReportes,
+    updateReportes,
+    deleteReportes
+ } from "../controllers/Reportes.js"
+import { verifyUser, staffOnly } from '../middleware/AuthUser.js';
 
-const router = express.Router();
+ const router = express.Router();
 
-router.get('/reportes', getReportes);
-router.get('/reportes/:id', getReportesById);
-router.post('/reportes', createReportes);
-router.patch('/reportes', updateReportes);
-router.delete('/reportes', deleteReportes);
+router.get('/reportes', verifyUser, getReportes);
+router.get('/reportes/:id', verifyUser, getReportesById);
+
+
+router.post('/reportes', verifyUser, staffOnly, createReportes);
+router.patch('/reportes/:id', verifyUser, staffOnly, updateReportes); 
+router.delete('/reportes/:id', verifyUser, staffOnly, deleteReportes); 
 
 export default router;

@@ -1,54 +1,39 @@
-// src/middlewares/auth.js
-import Users from "../models/UsersModel.js";
-
+import User from "../models/UserModel.js";
 
 export const verifyUser = async (req, res, next) => {
-  try {
-    const userUuid = req.session.userUuid || req.session.userId; 
-    if (!userUuid) {
-      return res.status(401).json({ msg: "Inicie sesión en su cuenta" });
+    if (!req.session.userId) {
+        return res.status(401).json({ msg: "Por favor, inicie sesión en su cuenta" });
     }
 
-    const user = await Users.findOne({
-      where: { uuid: userUuid },
-      attributes: ["id", "uuid", "name", "email", "role"],
+    const user = await User.findOne({
+        where: {
+            uuid: req.session.userId
+        }
     });
 
-    if (!user) {
+    if (!user) return res.status(404).json({ msg: "Usuario no encontrado" });
 
-      req.session.destroy(() => {});
-      return res.status(401).json({ msg: "Inicie sesión en su cuenta" });
-    }
-
-  
-    req.user = user;
-    req.userId = user.id;     
+   
+    req.userId = user.id; 
+    req.userUuid = user.uuid; 
     req.role = user.role;
-    res.locals.user = user;
-
-    return next();
-  } catch (err) {
-    return res.status(500).json({ msg: err.message });
-  }
+    
+    next();
 };
 
 
-export const allowRoles =
-  (...rolesPermitidos) =>
-  (req, res, next) => {
-    try {
-      if (!req.user) {
-        return res.status(500).json({ msg: "Middleware mal usado: falta verifyUser" });
-      }
-      if (!rolesPermitidos.includes(req.role)) {
-        return res.status(403).json({ msg: "Acceso denegado" });
-      }
-      return next();
-    } catch (err) {
-      return res.status(500).json({ msg: err.message });
+export const staffOnly = (req, res, next) => {
+   
+    if (req.role !== "administrador" && req.role !== "maestro") {
+        return res.status(403).json({ msg: "Acceso denegado: Permisos insuficientes" });
     }
-  };
+    next();
+};
 
 
-export const adminOnly = allowRoles("administrador");         
-export const adminOrMaestro = allowRoles("administrador", "maestro"); 
+export const adminOnly = (req, res, next) => {
+    if (req.role !== "administrador") {
+        return res.status(403).json({ msg: "Acceso denegado: Solo administradores" });
+    }
+    next();
+};
