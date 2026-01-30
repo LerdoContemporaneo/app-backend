@@ -26,18 +26,31 @@ Alumnos.belongsTo(Grados, { foreignKey: "gradoId", onDelete: 'CASCADE' });
 
 // --- 4. Maestros ↔ AsistenciaMaestro ---
 Users.hasMany(AsistenciaMaestro, { foreignKey: "maestroId" });
-AsistenciaMaestro.belongsTo(Users, { foreignKey: "maestroId", onDelete: 'CASCADE' });
+AsistenciaMaestro.belongsTo(Users, { foreignKey: "maestroId", as:"maestro", onDelete: 'CASCADE' });
 
 // --- 5. Alumnos ↔ Tablas de Datos ---
 // Si borras un alumno, se borran sus datos (CASCADE es lo normal aquí)
 Alumnos.hasMany(Asistencia, { foreignKey: "alumnoId" });
-Asistencia.belongsTo(Alumnos, { foreignKey: "alumnoId", onDelete: 'CASCADE' });
+Asistencia.belongsTo(Alumnos, { foreignKey: "alumnoId", as:"alumno", onDelete: 'CASCADE' });
+
+Grados.hasMany(Asistencia, { foreignKey: "gradoId" });
+Asistencia.belongsTo(Grados, { 
+    foreignKey: "gradoId", 
+    as: "grado",
+    onDelete: 'SET NULL' 
+});
 
 Alumnos.hasMany(Incidencia, { foreignKey: "alumnoId" });
-Incidencia.belongsTo(Alumnos, { foreignKey: "alumnoId", onDelete: 'CASCADE' });
+Incidencia.belongsTo(Alumnos, { foreignKey: "alumnoId", as:"alumno", onDelete: 'CASCADE' });
 
 Alumnos.hasMany(Reportes, { foreignKey: "alumnoId" });
-Reportes.belongsTo(Alumnos, { foreignKey: "alumnoId", onDelete: 'CASCADE' });
+Reportes.belongsTo(Alumnos, { foreignKey: "alumnoId", as: "alumno", onDelete: 'CASCADE' });
+
+Users.hasMany(Reportes, { foreignKey: "maestroId" });
+Reportes.belongsTo(Users, { foreignKey: "maestroId", as:"maestro", onDelete: 'SET NULL' });
+
+Grados.hasMany(Reportes, { foreignKey: "gradoId" });
+Reportes.belongsTo(Grados, { foreignKey: "gradoId", as:"grado", onDelete: 'SET NULL' });
 
 Alumnos.hasMany(Tareas, { foreignKey: "alumnoId" });
 Tareas.belongsTo(Alumnos, { foreignKey: "alumnoId", onDelete: 'CASCADE' });

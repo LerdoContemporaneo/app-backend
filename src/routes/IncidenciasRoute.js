@@ -1,21 +1,20 @@
 import express from 'express';
-import { getGrados, 
-    getGradosById,
-    createGrados,
-    updateGrados,
-    deleteGrados
- } from "../controllers/Grados.js"
+import { getIncidencias, 
+    getIncidenciasById, 
+    createIncidencias, 
+    updateIncidencias, 
+    deleteIncidencias } from "../controllers/Incidencias.js"
 import { verifyUser, staffOnly } from '../middleware/AuthUser.js';
 
  const router = express.Router();
 
 
-router.get('/grados', verifyUser, getGrados);
-router.get('/grados/:id', verifyUser, getGradosById);
+router.get('/incidencias', verifyUser, getIncidencias);
+router.get('/incidencias/:id', verifyUser, getIncidenciasById);
 
 
-router.post('/grados', verifyUser, staffOnly, createGrados);
-router.patch('/grados/:id', verifyUser, staffOnly, updateGrados); 
-router.delete('/grados/:id', verifyUser, staffOnly, deleteGrados); 
+router.post('/incidencias', verifyUser, staffOnly, createIncidencias);
+router.patch('/incidencias/:id', verifyUser, staffOnly, updateIncidencias); 
+router.delete('/incidencias/:id', verifyUser, staffOnly, deleteIncidencias); 
 
 export default router;

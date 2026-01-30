@@ -15,6 +15,7 @@ import AsistenciaRoute from "./routes/AsistenciaRoute.js";
 import AsistenciaMaestroRoute from "./routes/AsistenciaMaestroRoute.js";
 import IncidenciasRoute from "./routes/IncidenciasRoute.js";
 import ReportesRoute from "./routes/ReportesRoute.js";
+import TareasRoute from "./routes/TareasRoute.js";
 
 dotenv.config();
 
@@ -31,7 +32,7 @@ const store = new SequelizeStore({ db: db });
         console.log("🔄 Iniciando sincronización secuencial...");
 
         // Nivel 1: Usuarios (No depende de nadie)
-        await Users.sync({ alter: true });
+        await Users.sync({});
         console.log("✅ Tabla Users creada");
 
         // Nivel 2: Dependen de Users
@@ -98,6 +99,7 @@ app.use(AsistenciaRoute);
 app.use(AsistenciaMaestroRoute);
 app.use(IncidenciasRoute);
 app.use(ReportesRoute);
+app.use(TareasRoute);
 
 app.listen(process.env.PORT || 3000, () => {
     console.log(`Server running on port ${process.env.PORT || 3000}`);
