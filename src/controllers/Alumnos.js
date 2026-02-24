@@ -73,21 +73,30 @@ export const getAlumnoById = async (req, res) => {
 };
 
 export const createAlumnos = async (req, res) => {
-  const { nombre, apellido, matricula, tutor, gradoId, userId } = req.body;
+  const { nombre, apellido, matricula, tutor, gradoId, email, password } = req.body;
+
   try {
+    const hashPassword = await argon2.hash(password || "defaultPassword123");
+    const newUser = await Alumnos.create({
+      name: `${nombre} ${apellido}`,
+      email: email,
+      password: hashPassword,
+      role: "alumno",
+    });    
     await Alumnos.create({
       nombre,
       apellido,
       matricula,
       tutor,
       gradoId,
-      userId: userId,
+      userId: newUser.id, // Asociamos el alumno con el usuario creado
     });
-    res.status(201).json({ msg: "Alumno registrado correctamente" });
+    res.status(201).json({ msg: "Alumno creado correctamente" });
   } catch (error) {
     res.status(500).json({ msg: error.message });
-  }
-};
+  }  
+}
+
 
 export const updateAlumnos = async (req, res) => {
   try {

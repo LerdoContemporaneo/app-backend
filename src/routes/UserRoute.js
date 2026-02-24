@@ -9,6 +9,9 @@ import { verifyUser, adminOnly } from '../middleware/AuthUser.js';
 
 const router = express.Router();
 
+// solo para primera creacion de admin
+// router.post('/users', createUsers);
+
 router.get('/users', verifyUser, adminOnly, getUsers);
 router.get('/users/:id', verifyUser, adminOnly, getUserById);
 router.post('/users', verifyUser, adminOnly, createUsers);

@@ -26,42 +26,18 @@ app.set("trust proxy", 1);
 const SequelizeStore = connectSessionSequelize(session.Store);
 const store = new SequelizeStore({ db: db });
 
-// --- SINCRONIZACIÓN SECUENCIAL MANUAL ---// Esto garantiza que el Padre exista antes que el Hijo
 (async () => {
     try {
-        console.log("🔄 Iniciando sincronización secuencial...");
+        
+        console.log("🔄 Sincronizando Base de Datos...");
+        
+        await db.sync({ alter: false }); 
 
-        // Nivel 1: Usuarios (No depende de nadie)
-        await Users.sync({});
-        console.log("✅ Tabla Users creada");
-
-        // Nivel 2: Dependen de Users
-        await Grados.sync({ alter: true }); 
-        console.log("✅ Tabla Grados creada");
-
-        await AsistenciaMaestro.sync({ alter: true });
-        console.log("✅ Tabla AsistenciaMaestro creada");
-
-        // Nivel 3: Dependen de Grados y Users
-        await Alumnos.sync({ alter: true }); 
-        console.log("✅ Tabla Alumnos creada");
-
-        // Nivel 4: Dependen de Alumnos
-        await Promise.all([
-            Tareas.sync({ alter: true }),
-            Reportes.sync({ alter: true }),
-            Incidencia.sync({ alter: true }),
-            Asistencia.sync({ alter: true })
-        ]);
-        console.log("✅ Tablas de Datos (Tareas, Reportes, etc) creadas");
-
-        // Nivel 5: Sesiones
         await store.sync();
-        console.log("✅ Tabla Sessions creada");
-
-        console.log("🚀 BASE DE DATOS LISTA Y SINCRONIZADA CORRECTAMENTE");
+        
+        console.log("🚀 BASE DE DATOS LISTA");
     } catch (error) {
-        console.error("❌ Error Fatal al sincronizar:", error);
+        console.error("❌ Error al sincronizar:", error);
     }
 })();
 

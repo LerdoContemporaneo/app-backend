@@ -53,15 +53,15 @@ export const updateUsers = async (req, res) => {
   if (!user) return res.status(404).json({ msg: "Usuario no encontrado" });
   const { name, email, password, confPassword, role } = req.body;
   let hashPassword;
-  if (password === "" || password === null) {
+  if (!password || password === "") {
     hashPassword = user.password;
   } else {
-    hashPassword = await argon2.hash(password);
-  }
   if (password !== confPassword)
     return res
       .status(400)
       .json({ msg: "Contraseña y Confirmar contraseña no coinciden" });
+  hashPassword = await argon2.hash(password);
+  }
   try {
     await Users.update(
       {
