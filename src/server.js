@@ -57,7 +57,7 @@ app.use(session({
 }));
 
 app.use(cors({
-    origin: ["https://lerdo-front.vercel.app", "http://localhost:3000", "http://localhost:3001"],
+    origin: ["https://lerdo-front.vercel.app", "https://portal.lerdocontemporaneo.com"],
     credentials: true,
     methods: ["GET","POST","PATCH","PUT","DELETE","OPTIONS"],
     allowedHeaders: ["Content-Type","Authorization"],
