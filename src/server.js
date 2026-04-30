@@ -56,6 +56,7 @@ app.use(session({
     }
 }));
 
+// Eliminar de origin los dominios que no se usen en producción cuando ya no se necesiten
 app.use(cors({
     origin: ["https://lerdo-front.vercel.app", "https://portal.lerdocontemporaneo.com", "http://localhost:3000", "http://localhost:3001"],
     credentials: true,
