@@ -28,6 +28,11 @@ const Alumnos = db.define('alumnos', {
         type: DataTypes.STRING,
         allowNull: false
     },
+    // Nueva columna para el teléfono del tutor agregar resto del backend
+    telefonoTutor: {
+    type: DataTypes.STRING,
+    allowNull: true // No obligatorio todavía para no romper registros viejos
+    }
   
    
 }, {

@@ -8,6 +8,7 @@ import AsistenciaMaestro from "./AsistenciaMaestroModel.js";
 import Incidencia from "./IncidenciaModel.js";
 import Reportes from "./ReportesModel.js";
 import Tareas from "./TareasModel.js";
+// import Materias from "./MateriasModel.js";
 
 // --- 1. Relación Usuario (Login) ↔ Perfil Alumno ---
 Users.hasOne(Alumnos, { foreignKey: "userId" });
@@ -54,6 +55,9 @@ Reportes.belongsTo(Grados, { foreignKey: "gradoId", as:"grado", onDelete: 'SET N
 
 Alumnos.hasMany(Tareas, { foreignKey: "alumnoId" });
 Tareas.belongsTo(Alumnos, { foreignKey: "alumnoId", onDelete: 'CASCADE' });
+
+// Alumnos.hasMany(Materias, { foreignKey: "alumnoId" });
+// Materias.belongsTo(Alumnos, { foreignKey: "alumnoId", onDelete: 'CASCADE' });
 
 export {
   Users,

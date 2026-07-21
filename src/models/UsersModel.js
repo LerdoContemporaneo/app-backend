@@ -33,6 +33,18 @@ const Users = db.define(
       type: DataTypes.ENUM("administrador", "maestro", "alumno"),
       allowNull: false,
     },
+      // nuevos atributos para futuras funcionalidades crear resto del backend
+    telefono: {
+      type: DataTypes.STRING,
+      allowNull: true // Permitimos nulo por ahora
+    },
+    correoPersonal: {
+      type: DataTypes.STRING,
+      allowNull: true, // es opcional
+      validate: {
+        isEmail: true // Valida que tenga formato de correo si se ingresa
+      }
+    }
   },
   {
     freezeTableName: true,
