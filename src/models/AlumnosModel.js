@@ -1,7 +1,6 @@
 import { Sequelize } from "sequelize";
 import db from "../config/db.js";
 
-
 const { DataTypes } = Sequelize;
 
 const Alumnos = db.define('alumnos', {
@@ -26,15 +25,25 @@ const Alumnos = db.define('alumnos', {
     },
     tutor: {
         type: DataTypes.STRING,
-        allowNull: false
+        allowNull: false // Nombre en texto por si acaso
     },
-    // Nueva columna para el teléfono del tutor agregar resto del backend
     telefonoTutor: {
-    type: DataTypes.STRING,
-    allowNull: true // No obligatorio todavía para no romper registros viejos
+        type: DataTypes.STRING,
+        allowNull: true 
+    },
+    // NUEVAS LLAVES (Se recomiendan declarar aunque index.js las cree)
+    userId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: true // Puede ser null si el alumno aún no tiene cuenta de login
+    },
+    tutorId: {
+        type: DataTypes.INTEGER.UNSIGNED,
+        allowNull: true // ID de la cuenta del padre en la tabla Users
+    },
+    gradoId: {
+        type: DataTypes.INTEGER,
+        allowNull: true
     }
-  
-   
 }, {
     freezeTableName: true,
     timestamps: true,

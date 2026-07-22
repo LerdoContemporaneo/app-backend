@@ -3,29 +3,22 @@ import db from "../config/db.js";
  
 const { DataTypes } = Sequelize;
 
-const Tareas = db.define("tareas",
-  {
+const Tareas = db.define("tareas", {
     uuid: {
       type: DataTypes.STRING,
       defaultValue: DataTypes.UUIDV4,
       allowNull: false,
-      validate: {
-        notEmpty: true,
-      },
+      validate: { notEmpty: true },
     },
     titulo: {
       type: DataTypes.STRING,
       allowNull: false,
-      validate: {
-        notEmpty: true,
-      },
+      validate: { notEmpty: true },
     },
     descripcion: {
       type: DataTypes.TEXT,
       allowNull: false,
-      validate: {
-        notEmpty: true,
-      },
+      validate: { notEmpty: true },
     },
     fechaAsignacion: { 
       type: DataTypes.DATEONLY,
@@ -35,22 +28,17 @@ const Tareas = db.define("tareas",
     fechaEntrega: { 
       type: DataTypes.DATEONLY,
       allowNull: false,
-      validate: {
-        notEmpty: true,
-      },
+      validate: { notEmpty: true },
     },
-    
     alumnoId: { 
       type: DataTypes.INTEGER,
       allowNull: false,
-      validate: {
-        notEmpty: true,
-        isInt: true,
-      },
     },
-
-  },
-  {
+    materiaId: { 
+      type: DataTypes.INTEGER,
+      allowNull: false, // NUEVO: La tarea pertenece a una materia
+    },
+  }, {
     freezeTableName: true,
     timestamps: true,
   }

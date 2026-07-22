@@ -1,12 +1,9 @@
 import { Sequelize } from "sequelize";
 import db from "../config/db.js";
-import Alumnos from "./AlumnosModel.js";
 
 const { DataTypes } = Sequelize;
 
-const Reportes = db.define(
-  "reportes",
-  {
+const Reportes = db.define("reportes", {
     id: {
       type: DataTypes.INTEGER.UNSIGNED,
       primaryKey: true,
@@ -16,9 +13,7 @@ const Reportes = db.define(
       type: DataTypes.STRING,
       defaultValue: DataTypes.UUIDV4,
       allowNull: false,
-      validate: {
-        notEmpty: true,
-      },
+      validate: { notEmpty: true },
     },
     titulo: {
       type: DataTypes.STRING,
@@ -28,17 +23,15 @@ const Reportes = db.define(
       type: DataTypes.TEXT,
       allowNull: false,
     },
-    // nueva columna para registrar el autor del reporte agregar resto del backend
-    maestroId: {
+    alumnoId: {
       type: DataTypes.INTEGER,
-      allowNull: false, // Todo reporte DEBE tener un autor
-      references: {
-        model: 'users', // Apunta a la tabla de usuarios
-        key: 'id'
-      }
+      allowNull: false,
+    },
+    maestroId: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: false, 
     }
-  },
-  {
+  }, {
     freezeTableName: true,
   }
 );

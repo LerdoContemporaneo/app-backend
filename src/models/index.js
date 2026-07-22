@@ -10,54 +10,72 @@ import Reportes from "./ReportesModel.js";
 import Tareas from "./TareasModel.js";
 import Materias from "./MateriasModel.js";
 
-// --- 1. Relación Usuario (Login) ↔ Perfil Alumno ---
+// ==========================================
+// 1. IDENTIDAD Y PERFILES
+// ==========================================
+
+// Usuario (Login Alumno) ↔ Perfil Alumno
 Users.hasOne(Alumnos, { foreignKey: "userId" });
-// CORRECCIÓN: onDelete: 'CASCADE' para que coincida con allowNull: false
 Alumnos.belongsTo(Users, { foreignKey: "userId", onDelete: 'CASCADE' });
 
-// --- 2. Relación Usuario (Maestro) ↔ Grados ---
-Users.hasMany(Grados, { foreignKey: "maestroId" });
-// Aquí 'SET NULL' está bien porque un grado puede quedarse sin maestro temporalmente
-Grados.belongsTo(Users, { foreignKey: "maestroId", as: "maestro", onDelete: 'SET NULL' });
+// Usuario (Tutor/Papá) ↔ Alumnos (Hijos) 🆕
+Users.hasMany(Alumnos, { foreignKey: "tutorId", as: "hijos" });
+Alumnos.belongsTo(Users, { foreignKey: "tutorId", as: "tutor", onDelete: 'SET NULL' });
 
-// --- 3. Grados ↔ Alumnos ---
+
+// ==========================================
+// 2. ESTRUCTURA ACADÉMICA (Desvinculamos Grados de Maestros)
+// ==========================================
+
+// Grados ↔ Alumnos (Los alumnos pertenecen a un grado)
 Grados.hasMany(Alumnos, { foreignKey: "gradoId" });
-// CORRECCIÓN: onDelete: 'CASCADE' o 'RESTRICT'. Usaremos CASCADE para evitar el error 150.
 Alumnos.belongsTo(Grados, { foreignKey: "gradoId", onDelete: 'CASCADE' });
 
-// --- 4. Maestros ↔ AsistenciaMaestro ---
+// Grados ↔ Materias 🆕 (Un grado tiene varias materias, ej: 1ro tiene Mate, Español)
+Grados.hasMany(Materias, { foreignKey: "gradoId" });
+Materias.belongsTo(Grados, { foreignKey: "gradoId", onDelete: 'CASCADE' });
+
+// Maestro ↔ Materias 🆕 (Un maestro imparte varias materias)
+Users.hasMany(Materias, { foreignKey: "maestroId", as: "clasesAsignadas" });
+Materias.belongsTo(Users, { foreignKey: "maestroId", as: "maestro", onDelete: 'SET NULL' });
+
+
+// ==========================================
+// 3. OPERACIONES Y REGISTROS
+// ==========================================
+
+// Maestros ↔ AsistenciaMaestro
 Users.hasMany(AsistenciaMaestro, { foreignKey: "maestroId" });
-AsistenciaMaestro.belongsTo(Users, { foreignKey: "maestroId", as:"maestro", onDelete: 'CASCADE' });
+AsistenciaMaestro.belongsTo(Users, { foreignKey: "maestroId", as: "maestro", onDelete: 'CASCADE' });
 
-// --- 5. Alumnos ↔ Tablas de Datos ---
-// Si borras un alumno, se borran sus datos (CASCADE es lo normal aquí)
+// Alumnos ↔ Asistencia (Registro del alumno)
 Alumnos.hasMany(Asistencia, { foreignKey: "alumnoId" });
-Asistencia.belongsTo(Alumnos, { foreignKey: "alumnoId", as:"alumno", onDelete: 'CASCADE' });
+Asistencia.belongsTo(Alumnos, { foreignKey: "alumnoId", as: "alumno", onDelete: 'CASCADE' });
 
-Grados.hasMany(Asistencia, { foreignKey: "gradoId" });
-Asistencia.belongsTo(Grados, { 
-    foreignKey: "gradoId", 
-    as: "grado",
-    onDelete: 'SET NULL' 
-});
+// Materias ↔ Asistencia 🆕 (Para saber exactamente de qué clase faltó)
+Materias.hasMany(Asistencia, { foreignKey: "materiaId" });
+Asistencia.belongsTo(Materias, { foreignKey: "materiaId", as: "materia", onDelete: 'SET NULL' });
 
+// Alumnos ↔ Incidencia
 Alumnos.hasMany(Incidencia, { foreignKey: "alumnoId" });
-Incidencia.belongsTo(Alumnos, { foreignKey: "alumnoId", as:"alumno", onDelete: 'CASCADE' });
+Incidencia.belongsTo(Alumnos, { foreignKey: "alumnoId", as: "alumno", onDelete: 'CASCADE' });
 
+// Alumnos ↔ Reportes
 Alumnos.hasMany(Reportes, { foreignKey: "alumnoId" });
 Reportes.belongsTo(Alumnos, { foreignKey: "alumnoId", as: "alumno", onDelete: 'CASCADE' });
 
+// Maestro Creador ↔ Reportes (Quién emitió el reporte)
 Users.hasMany(Reportes, { foreignKey: "maestroId" });
-Reportes.belongsTo(Users, { foreignKey: "maestroId", as:"maestro", onDelete: 'SET NULL' });
+Reportes.belongsTo(Users, { foreignKey: "maestroId", as: "creador", onDelete: 'SET NULL' });
 
-Grados.hasMany(Reportes, { foreignKey: "gradoId" });
-Reportes.belongsTo(Grados, { foreignKey: "gradoId", as:"grado", onDelete: 'SET NULL' });
-
+// Alumnos ↔ Tareas (Entregas de los alumnos)
 Alumnos.hasMany(Tareas, { foreignKey: "alumnoId" });
 Tareas.belongsTo(Alumnos, { foreignKey: "alumnoId", onDelete: 'CASCADE' });
 
-Alumnos.hasMany(Materias, { foreignKey: "alumnoId" });
-Materias.belongsTo(Alumnos, { foreignKey: "alumnoId", onDelete: 'CASCADE' });
+// Materias ↔ Tareas 🆕 (Las tareas se asignan a una materia específica)
+Materias.hasMany(Tareas, { foreignKey: "materiaId" });
+Tareas.belongsTo(Materias, { foreignKey: "materiaId", onDelete: 'CASCADE' });
+
 
 export {
   Users,

@@ -31,7 +31,8 @@ const store = new SequelizeStore({ db: db });
         
         console.log("🔄 Sincronizando Base de Datos...");
         
-        await db.sync({ alter: false }); 
+        // await db.sync({ alter: false }); 
+        await db.sync({ force: true }); // remplazar en producción por alter: true para no perder datos
 
         await store.sync();
         

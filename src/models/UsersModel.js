@@ -30,19 +30,19 @@ const Users = db.define(
       allowNull: false,
     },
     role: {
-      type: DataTypes.ENUM("administrador", "maestro", "alumno"),
+      // NUEVO: Agregamos "tutor" al ENUM
+      type: DataTypes.ENUM("administrador", "maestro", "alumno", "tutor"),
       allowNull: false,
     },
-      // nuevos atributos para futuras funcionalidades crear resto del backend
     telefono: {
       type: DataTypes.STRING,
-      allowNull: true // Permitimos nulo por ahora
+      allowNull: true
     },
     correoPersonal: {
       type: DataTypes.STRING,
-      allowNull: true, // es opcional
+      allowNull: true,
       validate: {
-        isEmail: true // Valida que tenga formato de correo si se ingresa
+        isEmail: true
       }
     }
   },
@@ -56,17 +56,4 @@ const Users = db.define(
   }
 );
 
-const createFirstUser = async () => {
-  const userCount = await Users.count();
-  if (userCount === 0) {
-    await Users.create({
-      name: "Administrador",
-      email: "admin@example.com",
-      password: "hashed_password",
-      role: "administrador"
-    });
-  }
-};
-
 export default Users;
-export { createFirstUser };
