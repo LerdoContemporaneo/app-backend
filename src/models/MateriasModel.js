@@ -1,5 +1,5 @@
 import { Sequelize } from "sequelize";
-import db from "../config/Database.js";
+import db from "../config/db.js";
 
 const { DataTypes } = Sequelize;
 
@@ -29,5 +29,6 @@ const Materias = db.define('materias', {
 }, {
   freezeTableName: true
 });
+
 
 export default Materias;

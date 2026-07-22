@@ -56,6 +56,17 @@ const Users = db.define(
   }
 );
 
-
+const createFirstUser = async () => {
+  const userCount = await Users.count();
+  if (userCount === 0) {
+    await Users.create({
+      name: "Administrador",
+      email: "admin@example.com",
+      password: "hashed_password",
+      role: "administrador"
+    });
+  }
+};
 
 export default Users;
+export { createFirstUser };
