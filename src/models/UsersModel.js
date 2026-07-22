@@ -57,17 +57,5 @@ const Users = db.define(
 );
 
 
-// Función para crear un usuario administrador si no hay usuarios en la base de datos despues se puede eliminar o modificar para crear otros usuarios
-firstuser = async () => {
-  const userCount = await Users.count();
-  if (userCount === 0) {
-    await Users.create({
-      name: "Admin",
-      email: "admin@example.com",
-      password: "password",
-      role: "administrador"
-    });
-  }
-};
 
 export default Users;
