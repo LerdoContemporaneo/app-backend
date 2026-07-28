@@ -1,26 +1,128 @@
 import Asistencia from "../models/AsistenciaModel.js";
 import Alumnos from "../models/AlumnosModel.js";
 import Grados from "../models/GradosModel.js";
+import { Op } from "sequelize";
 
 export const getAsistencia = async (req, res) => {
   try {
+    const { role, userId } = req;
     const where = {};
-    if (req.query.alumnoId) where.alumnoId = Number(req.query.alumnoId);
-    if (req.query.gradoId) where.gradoId = Number(req.query.gradoId);
-    if (req.query.fecha) where.fecha = req.query.fecha;
+
+    // Filtro común por fecha
+    if (req.query.fecha) {
+      where.fecha = req.query.fecha;
+    }
+
+    if (role === "alumno") {
+      // El alumno solo puede consultar su propia asistencia
+      const alumno = await Alumnos.findOne({
+        where: {
+          userId,
+        },
+        attributes: ["id"],
+      });
+
+      if (!alumno) {
+        return res.status(404).json({
+          msg: "Perfil de alumno no encontrado",
+        });
+      }
+
+      // Este filtro se fuerza y no depende de lo enviado por la URL
+      where.alumnoId = alumno.id;
+    } else if (role === "maestro") {
+      // Buscar los grupos asignados al maestro
+      const grados = await Grados.findAll({
+        where: {
+          maestroId: userId,
+        },
+        attributes: ["id"],
+      });
+
+      const gradosIds = grados.map((grado) => grado.id);
+
+      // Si solicita un grupo concreto, verificar que le pertenezca
+      if (req.query.gradoId) {
+        const gradoIdSolicitado = Number(req.query.gradoId);
+
+        if (!gradosIds.includes(gradoIdSolicitado)) {
+          return res.status(403).json({
+            msg: "No tienes permiso para consultar la asistencia de este grupo",
+          });
+        }
+
+        where.gradoId = gradoIdSolicitado;
+      } else {
+        where.gradoId = {
+          [Op.in]: gradosIds,
+        };
+      }
+
+      // También puede consultar a un alumno, pero solo dentro de sus grupos
+      if (req.query.alumnoId) {
+        where.alumnoId = Number(req.query.alumnoId);
+      }
+    } else if (role === "administrador") {
+      // El administrador sí puede aplicar cualquier filtro
+      if (req.query.alumnoId) {
+        where.alumnoId = Number(req.query.alumnoId);
+      }
+
+      if (req.query.gradoId) {
+        where.gradoId = Number(req.query.gradoId);
+      }
+    } else {
+      return res.status(403).json({
+        msg: "No tienes permiso para consultar asistencias",
+      });
+    }
 
     const lista = await Asistencia.findAll({
       where,
-      attributes: ["id", "uuid", "fecha", "estado", "alumnoId", "gradoId"],
-      include: [
-        { model: Alumnos, as: "alumno", attributes: ["id", "uuid", "nombre", "apellido", "matricula", "tutor"] },
-        { model: Grados, as: "grado", attributes: ["id", "uuid", "nombre"] },
+      attributes: [
+        "id",
+        "uuid",
+        "fecha",
+        "estado",
+        "alumnoId",
+        "gradoId",
       ],
-      order: [["id", "DESC"]],
+      include: [
+        {
+          model: Alumnos,
+          as: "alumno",
+          attributes: [
+            "id",
+            "uuid",
+            "nombre",
+            "apellido",
+            "matricula",
+            "tutor",
+          ],
+        },
+        {
+          model: Grados,
+          as: "grado",
+          attributes: [
+            "id",
+            "uuid",
+            "nombre",
+          ],
+        },
+      ],
+      order: [
+        ["fecha", "DESC"],
+        ["id", "DESC"],
+      ],
     });
-    res.status(200).json(lista);
+
+    return res.status(200).json(lista);
   } catch (error) {
-    res.status(500).json({ msg: error.message });
+    console.error("Error al obtener asistencias:", error);
+
+    return res.status(500).json({
+      msg: error.message,
+    });
   }
 };
 
