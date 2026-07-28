@@ -40,14 +40,14 @@ const Tareas = db.define("tareas",
       },
     },
     
-    alumnoId: { 
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      validate: {
-        notEmpty: true,
-        isInt: true,
-      },
-    },
+    gradoId: {
+  type: DataTypes.INTEGER,
+  allowNull: false,
+  validate: {
+    isInt: true,
+    min: 1,
+  },
+}
 
   },
   {
