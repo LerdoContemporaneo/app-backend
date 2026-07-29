@@ -1,21 +1,22 @@
-import express from 'express';
-import { getGrados, 
-    getGradosById,
-    createGrados,
-    updateGrados,
-    deleteGrados
- } from "../controllers/Grados.js"
-import { verifyUser, staffOnly } from '../middleware/AuthUser.js';
+import express from "express";
+import {
+  createGrados,
+  deleteGrados,
+  getGrados,
+  getGradosById,
+  updateGrados,
+} from "../controllers/Grados.js";
+import {
+  adminOnly,
+  verifyUser,
+} from "../middleware/AuthUser.js";
 
- const router = express.Router();
+const router = express.Router();
 
-
-router.get('/grados', verifyUser, getGrados);
-router.get('/grados/:id', verifyUser, getGradosById);
-
-
-router.post('/grados', verifyUser, staffOnly, createGrados);
-router.patch('/grados/:id', verifyUser, staffOnly, updateGrados); 
-router.delete('/grados/:id', verifyUser, staffOnly, deleteGrados); 
+router.get("/grados", verifyUser, getGrados);
+router.get("/grados/:id", verifyUser, getGradosById);
+router.post("/grados", verifyUser, adminOnly, createGrados);
+router.patch("/grados/:id", verifyUser, adminOnly, updateGrados);
+router.delete("/grados/:id", verifyUser, adminOnly, deleteGrados);
 
 export default router;

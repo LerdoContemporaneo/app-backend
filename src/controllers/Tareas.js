@@ -1,155 +1,121 @@
+import { Op } from "sequelize";
 import {
-  Tareas,
   Alumnos,
   Grados,
+  Tareas,
 } from "../models/index.js";
-import { Op } from "sequelize";
+import {
+  ROLES,
+  enteroPositivo,
+  esFechaValida,
+  obtenerGradosIdsDelMaestro,
+  usuarioAlumnoPerteneceAlGrado,
+} from "../utils/controllerUtils.js";
 
 const incluirGrado = {
   model: Grados,
   as: "grado",
-  attributes: [
-    "id",
-    "uuid",
-    "nombre",
-    "maestroId",
-  ],
+  attributes: ["id", "uuid", "nombre", "maestroId"],
 };
 
-const obtenerGradosDelMaestro = async (maestroId) => {
-  const grados = await Grados.findAll({
-    where: {
-      maestroId,
-    },
-    attributes: ["id"],
+const atributos = [
+  "id",
+  "uuid",
+  "titulo",
+  "descripcion",
+  "fechaAsignacion",
+  "fechaEntrega",
+  "gradoId",
+  "createdAt",
+  "updatedAt",
+];
+
+const buscarTarea = (uuid) =>
+  Tareas.findOne({
+    where: { uuid },
+    attributes: atributos,
+    include: [incluirGrado],
   });
 
-  return grados.map((grado) => grado.id);
-};
-
-const alumnoPerteneceAlGrado = async (userId, gradoId) => {
-  const alumno = await Alumnos.findOne({
-    where: {
-      userId,
-    },
-    attributes: ["id"],
-    include: [
-      {
-        model: Grados,
-        as: "grados",
-        attributes: ["id"],
-        where: {
-          id: gradoId,
-        },
-        through: {
-          attributes: [],
-        },
-        required: true,
-      },
-    ],
-  });
-
-  return Boolean(alumno);
-};
-
-const obtenerGradoAutorizado = async (
+const validarGradoParaGestion = async (
   gradoId,
   role,
   userId,
 ) => {
+  if (!gradoId) {
+    return { status: 400, msg: "El grupo no es válido" };
+  }
+
   const grado = await Grados.findByPk(gradoId, {
-    attributes: [
-      "id",
-      "uuid",
-      "nombre",
-      "maestroId",
-    ],
+    attributes: ["id", "maestroId"],
   });
 
   if (!grado) {
-    return {
-      error: {
-        status: 404,
-        msg: "Grupo no encontrado",
-      },
-    };
+    return { status: 404, msg: "Grupo no encontrado" };
   }
 
   if (
-    role === "maestro" &&
+    role === ROLES.MAESTRO &&
     Number(grado.maestroId) !== Number(userId)
   ) {
     return {
-      error: {
-        status: 403,
-        msg: "No puedes administrar tareas de otro maestro",
-      },
+      status: 403,
+      msg: "No puedes administrar tareas de otro maestro",
     };
   }
 
   if (
-    role !== "maestro" &&
-    role !== "administrador"
+    role !== ROLES.MAESTRO &&
+    role !== ROLES.ADMINISTRADOR
   ) {
     return {
-      error: {
-        status: 403,
-        msg: "No tienes permiso para administrar tareas",
-      },
+      status: 403,
+      msg: "No tienes permiso para administrar tareas",
     };
   }
 
-  return {
-    grado,
-  };
+  return null;
 };
 
-const buscarTarea = async (uuid) => {
-  return Tareas.findOne({
-    where: {
-      uuid,
-    },
-    attributes: [
-      "id",
-      "uuid",
-      "titulo",
-      "descripcion",
-      "fechaAsignacion",
-      "fechaEntrega",
-      "gradoId",
-    ],
-    include: [incluirGrado],
-  });
+const validarFechas = (asignacion, entrega) => {
+  if (
+    !esFechaValida(asignacion) ||
+    !esFechaValida(entrega)
+  ) {
+    return {
+      status: 400,
+      msg: "Las fechas deben tener el formato YYYY-MM-DD",
+    };
+  }
+
+  if (entrega < asignacion) {
+    return {
+      status: 400,
+      msg: "La fecha de entrega no puede ser anterior a la asignación",
+    };
+  }
+
+  return null;
 };
 
 export const getTareas = async (req, res) => {
   try {
     const { role, userId } = req;
-    let whereCondition = {};
+    const where = {};
 
-    if (role === "maestro") {
-      const gradosIds =
-        await obtenerGradosDelMaestro(userId);
-
-      whereCondition = {
-        gradoId: {
-          [Op.in]: gradosIds,
-        },
-      };
-    } else if (role === "alumno") {
+    if (role === ROLES.MAESTRO) {
+      const gradosIds = await obtenerGradosIdsDelMaestro(userId);
+      where.gradoId = { [Op.in]: gradosIds };
+    } else if (role === ROLES.ALUMNO) {
       const alumno = await Alumnos.findOne({
-        where: {
-          userId,
-        },
+        where: { userId },
         attributes: ["id"],
         include: [
           {
             model: Grados,
             as: "grados",
             attributes: ["id"],
-            through: {
-              attributes: [],
-            },
+            through: { attributes: [] },
           },
         ],
       });
@@ -160,32 +126,48 @@ export const getTareas = async (req, res) => {
         });
       }
 
-      const gradosIds = alumno.grados.map(
-        (grado) => grado.id,
-      );
-
-      whereCondition = {
-        gradoId: {
-          [Op.in]: gradosIds,
-        },
+      where.gradoId = {
+        [Op.in]: alumno.grados.map((grado) => Number(grado.id)),
       };
-    } else if (role !== "administrador") {
+    } else if (role !== ROLES.ADMINISTRADOR) {
       return res.status(403).json({
         msg: "No tienes permiso para consultar tareas",
       });
     }
 
+    if (req.query.gradoId !== undefined) {
+      const gradoId = enteroPositivo(req.query.gradoId);
+
+      if (!gradoId) {
+        return res.status(400).json({
+          msg: "El gradoId no es válido",
+        });
+      }
+
+      if (
+        role === ROLES.MAESTRO &&
+        !(await obtenerGradosIdsDelMaestro(userId)).includes(gradoId)
+      ) {
+        return res.status(403).json({
+          msg: "No puedes consultar tareas de ese grupo",
+        });
+      }
+
+      if (
+        role === ROLES.ALUMNO &&
+        !(await usuarioAlumnoPerteneceAlGrado(userId, gradoId))
+      ) {
+        return res.status(403).json({
+          msg: "No perteneces al grupo seleccionado",
+        });
+      }
+
+      where.gradoId = gradoId;
+    }
+
     const tareas = await Tareas.findAll({
-      attributes: [
-        "id",
-        "uuid",
-        "titulo",
-        "descripcion",
-        "fechaAsignacion",
-        "fechaEntrega",
-        "gradoId",
-      ],
-      where: whereCondition,
+      where,
+      attributes: atributos,
       include: [incluirGrado],
       order: [
         ["fechaEntrega", "ASC"],
@@ -196,45 +178,48 @@ export const getTareas = async (req, res) => {
     return res.status(200).json(tareas);
   } catch (error) {
     console.error("Error al obtener tareas:", error);
-
     return res.status(500).json({
-      msg: error.message,
+      msg: "No fue posible obtener las tareas",
     });
   }
 };
 
 export const getTareasById = async (req, res) => {
   try {
-    const { role, userId } = req;
     const tarea = await buscarTarea(req.params.id);
 
     if (!tarea) {
-      return res.status(404).json({
-        msg: "Tarea no encontrada",
+      return res.status(404).json({ msg: "Tarea no encontrada" });
+    }
+
+    if (
+      req.role === ROLES.MAESTRO &&
+      Number(tarea.grado?.maestroId) !== Number(req.userId)
+    ) {
+      return res.status(403).json({
+        msg: "No puedes consultar tareas de otro maestro",
       });
     }
 
-    if (role === "maestro") {
-      if (
-        Number(tarea.grado?.maestroId) !==
-        Number(userId)
-      ) {
-        return res.status(403).json({
-          msg: "No puedes consultar tareas de otro maestro",
-        });
-      }
-    } else if (role === "alumno") {
-      const autorizado = await alumnoPerteneceAlGrado(
-        userId,
+    if (
+      req.role === ROLES.ALUMNO &&
+      !(await usuarioAlumnoPerteneceAlGrado(
+        req.userId,
         tarea.gradoId,
-      );
+      ))
+    ) {
+      return res.status(403).json({
+        msg: "Esta tarea no pertenece a uno de tus grupos",
+      });
+    }
 
-      if (!autorizado) {
-        return res.status(403).json({
-          msg: "Esta tarea no pertenece a uno de tus grupos",
-        });
-      }
-    } else if (role !== "administrador") {
+    if (
+      ![
+        ROLES.ADMINISTRADOR,
+        ROLES.MAESTRO,
+        ROLES.ALUMNO,
+      ].includes(req.role)
+    ) {
       return res.status(403).json({
         msg: "No tienes permiso para consultar esta tarea",
       });
@@ -243,216 +228,208 @@ export const getTareasById = async (req, res) => {
     return res.status(200).json(tarea);
   } catch (error) {
     console.error("Error al obtener tarea:", error);
-
     return res.status(500).json({
-      msg: error.message,
+      msg: "No fue posible obtener la tarea",
     });
   }
 };
 
 export const createTareas = async (req, res) => {
   try {
-    const { role, userId } = req;
-
     const {
       titulo,
       descripcion,
       fechaAsignacion,
       fechaEntrega,
-      gradoId,
     } = req.body;
+    const gradoId = enteroPositivo(req.body.gradoId);
 
-    const gradoIdNumerico = Number(gradoId);
-
-    if (
-      !titulo?.trim() ||
-      !fechaAsignacion ||
-      !fechaEntrega ||
-      !Number.isInteger(gradoIdNumerico) ||
-      gradoIdNumerico <= 0
-    ) {
+    if (typeof titulo !== "string" || !titulo.trim()) {
       return res.status(400).json({
-        msg: "Título, fechas y grupo son obligatorios",
+        msg: "El título es obligatorio",
       });
     }
 
     if (
-      new Date(fechaEntrega) <
-      new Date(fechaAsignacion)
+      typeof descripcion !== "string" ||
+      !descripcion.trim()
     ) {
       return res.status(400).json({
-        msg: "La fecha de entrega no puede ser anterior a la asignación",
+        msg: "La descripción es obligatoria",
       });
     }
 
-    const resultado = await obtenerGradoAutorizado(
-      gradoIdNumerico,
-      role,
-      userId,
-    );
-
-    if (resultado.error) {
-      return res
-        .status(resultado.error.status)
-        .json({ msg: resultado.error.msg });
-    }
-
-    const tarea = await Tareas.create({
-      titulo: titulo.trim(),
-      descripcion: descripcion?.trim() || null,
+    const errorFechas = validarFechas(
       fechaAsignacion,
       fechaEntrega,
-      gradoId: gradoIdNumerico,
-    });
+    );
 
-    const tareaCreada = await buscarTarea(tarea.uuid);
+    if (errorFechas) {
+      return res
+        .status(errorFechas.status)
+        .json({ msg: errorFechas.msg });
+    }
+
+    const errorGrado = await validarGradoParaGestion(
+      gradoId,
+      req.role,
+      req.userId,
+    );
+
+    if (errorGrado) {
+      return res
+        .status(errorGrado.status)
+        .json({ msg: errorGrado.msg });
+    }
+
+    const creada = await Tareas.create({
+      titulo: titulo.trim(),
+      descripcion: descripcion.trim(),
+      fechaAsignacion,
+      fechaEntrega,
+      gradoId,
+    });
+    const tarea = await buscarTarea(creada.uuid);
 
     return res.status(201).json({
       msg: "Tarea asignada al grupo correctamente",
-      tarea: tareaCreada,
+      tarea,
     });
   } catch (error) {
     console.error("Error al crear tarea:", error);
-
     return res.status(500).json({
-      msg: error.message,
+      msg: "No fue posible crear la tarea",
     });
   }
 };
 
 export const updateTareas = async (req, res) => {
   try {
-    const { role, userId } = req;
-
-    const tarea = await Tareas.findOne({
-      where: {
-        uuid: req.params.id,
-      },
-    });
+    const tarea = await buscarTarea(req.params.id);
 
     if (!tarea) {
-      return res.status(404).json({
-        msg: "Tarea no encontrada",
-      });
+      return res.status(404).json({ msg: "Tarea no encontrada" });
     }
 
-    const {
-      titulo,
-      descripcion,
-      fechaAsignacion,
-      fechaEntrega,
-      gradoId,
-    } = req.body;
-
-    const gradoIdDestino =
-      gradoId !== undefined
-        ? Number(gradoId)
-        : Number(tarea.gradoId);
-
-    if (
-      !Number.isInteger(gradoIdDestino) ||
-      gradoIdDestino <= 0
-    ) {
-      return res.status(400).json({
-        msg: "El grupo seleccionado no es válido",
-      });
-    }
-
-    const gradoActual = await obtenerGradoAutorizado(
-      tarea.gradoId,
-      role,
-      userId,
+    const errorGradoActual = await validarGradoParaGestion(
+      Number(tarea.gradoId),
+      req.role,
+      req.userId,
     );
 
-    if (gradoActual.error) {
+    if (errorGradoActual) {
       return res
-        .status(gradoActual.error.status)
-        .json({ msg: gradoActual.error.msg });
+        .status(errorGradoActual.status)
+        .json({ msg: errorGradoActual.msg });
     }
 
-    const gradoDestino = await obtenerGradoAutorizado(
-      gradoIdDestino,
-      role,
-      userId,
-    );
-
-    if (gradoDestino.error) {
-      return res
-        .status(gradoDestino.error.status)
-        .json({ msg: gradoDestino.error.msg });
-    }
-
-    const asignacionFinal =
-      fechaAsignacion ?? tarea.fechaAsignacion;
-
-    const entregaFinal =
-      fechaEntrega ?? tarea.fechaEntrega;
-
-    if (
-      new Date(entregaFinal) <
-      new Date(asignacionFinal)
-    ) {
+    if (Object.keys(req.body).length === 0) {
       return res.status(400).json({
-        msg: "La fecha de entrega no puede ser anterior a la asignación",
+        msg: "No se proporcionaron datos para actualizar",
       });
     }
 
-    await tarea.update({
-      titulo:
-        typeof titulo === "string"
-          ? titulo.trim()
-          : tarea.titulo,
-      descripcion:
-        descripcion !== undefined
-          ? descripcion?.trim() || null
-          : tarea.descripcion,
-      fechaAsignacion: asignacionFinal,
-      fechaEntrega: entregaFinal,
-      gradoId: gradoIdDestino,
-    });
+    const updateData = {};
 
-    const tareaActualizada =
-      await buscarTarea(tarea.uuid);
+    if (req.body.titulo !== undefined) {
+      if (
+        typeof req.body.titulo !== "string" ||
+        !req.body.titulo.trim()
+      ) {
+        return res.status(400).json({
+          msg: "El título es obligatorio",
+        });
+      }
+      updateData.titulo = req.body.titulo.trim();
+    }
+
+    if (req.body.descripcion !== undefined) {
+      if (
+        typeof req.body.descripcion !== "string" ||
+        !req.body.descripcion.trim()
+      ) {
+        return res.status(400).json({
+          msg: "La descripción es obligatoria",
+        });
+      }
+      updateData.descripcion = req.body.descripcion.trim();
+    }
+
+    const asignacion =
+      req.body.fechaAsignacion ?? tarea.fechaAsignacion;
+    const entrega = req.body.fechaEntrega ?? tarea.fechaEntrega;
+
+    if (
+      req.body.fechaAsignacion !== undefined ||
+      req.body.fechaEntrega !== undefined
+    ) {
+      const errorFechas = validarFechas(asignacion, entrega);
+
+      if (errorFechas) {
+        return res
+          .status(errorFechas.status)
+          .json({ msg: errorFechas.msg });
+      }
+
+      updateData.fechaAsignacion = asignacion;
+      updateData.fechaEntrega = entrega;
+    }
+
+    if (req.body.gradoId !== undefined) {
+      const gradoId = enteroPositivo(req.body.gradoId);
+      const errorGradoDestino = await validarGradoParaGestion(
+        gradoId,
+        req.role,
+        req.userId,
+      );
+
+      if (errorGradoDestino) {
+        return res
+          .status(errorGradoDestino.status)
+          .json({ msg: errorGradoDestino.msg });
+      }
+      updateData.gradoId = gradoId;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({
+        msg: "No se proporcionaron campos válidos para actualizar",
+      });
+    }
+
+    await tarea.update(updateData);
+    const actualizada = await buscarTarea(tarea.uuid);
 
     return res.status(200).json({
       msg: "Tarea actualizada correctamente",
-      tarea: tareaActualizada,
+      tarea: actualizada,
     });
   } catch (error) {
     console.error("Error al actualizar tarea:", error);
-
     return res.status(500).json({
-      msg: error.message,
+      msg: "No fue posible actualizar la tarea",
     });
   }
 };
 
 export const deleteTareas = async (req, res) => {
   try {
-    const { role, userId } = req;
-
-    const tarea = await Tareas.findOne({
-      where: {
-        uuid: req.params.id,
-      },
-    });
+    const tarea = await buscarTarea(req.params.id);
 
     if (!tarea) {
-      return res.status(404).json({
-        msg: "Tarea no encontrada",
-      });
+      return res.status(404).json({ msg: "Tarea no encontrada" });
     }
 
-    const resultado = await obtenerGradoAutorizado(
-      tarea.gradoId,
-      role,
-      userId,
+    const errorGrado = await validarGradoParaGestion(
+      Number(tarea.gradoId),
+      req.role,
+      req.userId,
     );
 
-    if (resultado.error) {
+    if (errorGrado) {
       return res
-        .status(resultado.error.status)
-        .json({ msg: resultado.error.msg });
+        .status(errorGrado.status)
+        .json({ msg: errorGrado.msg });
     }
 
     await tarea.destroy();
@@ -462,9 +439,8 @@ export const deleteTareas = async (req, res) => {
     });
   } catch (error) {
     console.error("Error al eliminar tarea:", error);
-
     return res.status(500).json({
-      msg: error.message,
+      msg: "No fue posible eliminar la tarea",
     });
   }
 };

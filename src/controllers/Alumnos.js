@@ -1,79 +1,121 @@
-import {
+import db, {
   Alumnos,
   Grados,
   Users,
 } from "../models/index.js";
+import { Op } from "sequelize";
+import {
+  ROLES,
+  enteroPositivo,
+  esErrorRelacion,
+  esErrorUnico,
+  maestroPuedeGestionarAlumno,
+  normalizarIds,
+} from "../utils/controllerUtils.js";
 
+const atributosAlumno = [
+  "id",
+  "uuid",
+  "nombre",
+  "apellido",
+  "matricula",
+  "tutor",
+  "telefonoTutor",
+  "userId",
+];
 
 const gradoConMaestro = {
   model: Grados,
   as: "grados",
-  attributes: [
-    "id",
-    "uuid",
-    "nombre",
-    "maestroId",
-  ],
-  through: {
-    attributes: [],
-  },
+  attributes: ["id", "uuid", "nombre", "maestroId"],
+  through: { attributes: [] },
   include: [
     {
       model: Users,
       as: "maestro",
-      attributes: [
-        "id",
-        "uuid",
-        "name",
-        "email",
-        "role",
-      ],
+      attributes: ["id", "uuid", "name", "email", "role"],
       required: false,
     },
   ],
 };
 
+const buscarAlumno = (uuid, transaction) =>
+  Alumnos.findOne({
+    where: { uuid },
+    attributes: atributosAlumno,
+    include: [gradoConMaestro],
+    transaction,
+  });
+
+const validarGrados = async (
+  gradoIds,
+  role,
+  userId,
+  transaction,
+) => {
+  const grados = await Grados.findAll({
+    where: { id: { [Op.in]: gradoIds } },
+    attributes: ["id", "nombre", "maestroId"],
+    transaction,
+  });
+
+  if (grados.length !== gradoIds.length) {
+    return {
+      status: 400,
+      msg: "Uno o más grupos seleccionados no existen",
+    };
+  }
+
+  const sinMaestro = grados.find((grado) => !grado.maestroId);
+
+  if (sinMaestro) {
+    return {
+      status: 400,
+      msg: `El grupo ${sinMaestro.nombre} no tiene un maestro responsable`,
+    };
+  }
+
+  if (
+    role === ROLES.MAESTRO &&
+    grados.some(
+      (grado) => Number(grado.maestroId) !== Number(userId),
+    )
+  ) {
+    return {
+      status: 403,
+      msg: "No puedes asignar alumnos a grupos de otro maestro",
+    };
+  }
+
+  return null;
+};
+
 export const getAlumnos = async (req, res) => {
   try {
     const { role, userId } = req;
+    let where = {};
+    let include = [gradoConMaestro];
 
-    let whereCondition = {};
-
-    if (role === "alumno") {
-      // El alumno solamente puede consultar su perfil.
-      whereCondition = {
-        userId,
-      };
-    }
-
-    if (role === "maestro") {
-      // El maestro solamente puede consultar alumnos
-      // pertenecientes a sus grupos.
-      const grados = await Grados.findAll({
-        where: {
-          maestroId: userId,
+    if (role === ROLES.ALUMNO) {
+      where = { userId };
+    } else if (role === ROLES.MAESTRO) {
+      include = [
+        {
+          ...gradoConMaestro,
+          where: { maestroId: userId },
+          required: true,
         },
-        attributes: ["id"],
+      ];
+    } else if (role !== ROLES.ADMINISTRADOR) {
+      return res.status(403).json({
+        msg: "No tienes permiso para consultar alumnos",
       });
-
-      const gradosIds = grados.map((grado) => grado.id);
-
     }
 
     const alumnos = await Alumnos.findAll({
-      attributes: [
-        "id",
-        "uuid",
-        "nombre",
-        "apellido",
-        "matricula",
-        "tutor",
-        "telefonoTutor",
-        "userId",
-        "gradoId",
-      ],
-      where: whereCondition,
-      include: [gradoConMaestro],
+      attributes: atributosAlumno,
+      where,
+      include,
       order: [
         ["apellido", "ASC"],
         ["nombre", "ASC"],
@@ -83,76 +125,68 @@ export const getAlumnos = async (req, res) => {
     return res.status(200).json(alumnos);
   } catch (error) {
     console.error("Error al obtener alumnos:", error);
-
-    return res.status(500).json({
-      msg: error.message,
-    });
+    return res.status(500).json({ msg: "No fue posible obtener los alumnos" });
   }
 };
 
 export const getAlumnoById = async (req, res) => {
   try {
-    const alumno = await Alumnos.findOne({
-      attributes: [
-        "id",
-        "uuid",
-        "nombre",
-        "apellido",
-        "matricula",
-        "tutor",
-        "telefonoTutor",
-        "userId",
-        "gradoId",
-      ],
-      where: {
-        uuid: req.params.id,
-      },
-      include: [gradoConMaestro],
-    });
+    const alumno = await buscarAlumno(req.params.id);
 
     if (!alumno) {
-      return res.status(404).json({
-        msg: "Alumno no encontrado",
-      });
+      return res.status(404).json({ msg: "Alumno no encontrado" });
     }
 
-    // Un alumno solamente puede ver su propio perfil.
     if (
-      req.role === "alumno" &&
+      req.role === ROLES.ALUMNO &&
       Number(alumno.userId) !== Number(req.userId)
     ) {
       return res.status(403).json({
-        msg: "Acceso denegado: no puedes ver perfiles de otros alumnos",
+        msg: "No puedes consultar perfiles de otros alumnos",
       });
     }
 
-    // Un maestro solamente puede consultar alumnos
-    // pertenecientes a uno de sus grupos.
-  if (req.role === "maestro") {
-  const perteneceAlMaestro = alumno.grados?.some(
-    (grado) =>
-      Number(grado.maestroId) === Number(req.userId),
-  );
+    if (req.role === ROLES.MAESTRO) {
+      const permitido = alumno.grados?.some(
+        (grado) =>
+          Number(grado.maestroId) === Number(req.userId),
+      );
 
-  if (!perteneceAlMaestro) {
-    return res.status(403).json({
-      msg: "El alumno no pertenece a uno de tus grupos",
-    });
-  }
-}
+      if (!permitido) {
+        return res.status(403).json({
+          msg: "El alumno no pertenece a uno de tus grupos",
+        });
+      }
+    } else if (
+      req.role !== ROLES.ADMINISTRADOR &&
+      req.role !== ROLES.ALUMNO
+    ) {
+      return res.status(403).json({
+        msg: "No tienes permiso para consultar este alumno",
+      });
+    }
 
     return res.status(200).json(alumno);
   } catch (error) {
     console.error("Error al obtener alumno:", error);
-
-    return res.status(500).json({
-      msg: error.message,
-    });
+    return res.status(500).json({ msg: "No fue posible obtener el alumno" });
   }
 };
 
 export const createAlumnos = async (req, res) => {
+  const transaction = await db.transaction();
+
   try {
+    if (
+      req.role !== ROLES.ADMINISTRADOR &&
+      req.role !== ROLES.MAESTRO
+    ) {
+      await transaction.rollback();
+      return res.status(403).json({
+        msg: "No tienes permiso para registrar alumnos",
+      });
+    }
+
     const {
       nombre,
       apellido,
@@ -160,126 +194,167 @@ export const createAlumnos = async (req, res) => {
       tutor,
       telefonoTutor,
       gradoId,
+      gradoIds,
       userId,
     } = req.body;
 
+    const usuarioId = enteroPositivo(userId);
+    const grupos = normalizarIds(gradoId, gradoIds);
+
     if (
-      !nombre?.trim() ||
-      !matricula?.trim() ||
-      !tutor?.trim() ||
-      !userId ||
-      !gradoId
+      typeof nombre !== "string" ||
+      !nombre.trim() ||
+      typeof matricula !== "string" ||
+      !matricula.trim() ||
+      typeof tutor !== "string" ||
+      !tutor.trim() ||
+      !usuarioId ||
+      !grupos
     ) {
+      await transaction.rollback();
       return res.status(400).json({
         msg: "Nombre, matrícula, tutor, usuario y grupo son obligatorios",
       });
     }
 
-    /*
-     * El usuario ya debe existir y tener rol alumno.
-     * No se crea otro usuario en este controlador.
-     */
-    const usuario = await Users.findOne({
-      where: {
-        id: userId,
-        role: "alumno",
-      },
-    });
+    const [usuario, perfilExistente, matriculaExistente] =
+      await Promise.all([
+        Users.findOne({
+          where: { id: usuarioId, role: ROLES.ALUMNO },
+          attributes: ["id"],
+          transaction,
+        }),
+        Alumnos.findOne({
+          where: { userId: usuarioId },
+          attributes: ["id"],
+          transaction,
+        }),
+        Alumnos.findOne({
+          where: { matricula: matricula.trim() },
+          attributes: ["id"],
+          transaction,
+        }),
+      ]);
 
     if (!usuario) {
+      await transaction.rollback();
       return res.status(400).json({
         msg: "El usuario seleccionado no existe o no tiene rol de alumno",
       });
     }
 
-    const perfilExistente = await Alumnos.findOne({
-      where: {
-        userId,
-      },
-    });
-
     if (perfilExistente) {
+      await transaction.rollback();
       return res.status(409).json({
-        msg: "El usuario seleccionado ya está vinculado con un alumno",
+        msg: "El usuario ya está vinculado con un perfil de alumno",
       });
     }
 
-    const matriculaExistente = await Alumnos.findOne({
-      where: {
-        matricula: matricula.trim(),
-      },
-    });
-
     if (matriculaExistente) {
+      await transaction.rollback();
       return res.status(409).json({
         msg: "La matrícula ya está registrada",
       });
     }
 
-    const grado = await Grados.findByPk(gradoId, {
-      attributes: [
-        "id",
-        "nombre",
-        "maestroId",
-      ],
-    });
+    const errorGrados = await validarGrados(
+      grupos,
+      req.role,
+      req.userId,
+      transaction,
+    );
 
-    if (!grado) {
-      return res.status(400).json({
-        msg: "El grupo seleccionado no existe",
-      });
+    if (errorGrados) {
+      await transaction.rollback();
+      return res
+        .status(errorGrados.status)
+        .json({ msg: errorGrados.msg });
     }
 
-    if (!grado.maestroId) {
-      return res.status(400).json({
-        msg: "El grupo seleccionado no tiene un maestro responsable",
-      });
-    }
+    const nuevoAlumno = await Alumnos.create(
+      {
+        nombre: nombre.trim(),
+        apellido:
+          typeof apellido === "string" ? apellido.trim() : "",
+        matricula: matricula.trim(),
+        tutor: tutor.trim(),
+        telefonoTutor:
+          typeof telefonoTutor === "string" && telefonoTutor.trim()
+            ? telefonoTutor.trim()
+            : null,
+        userId: usuarioId,
+      },
+      { transaction },
+    );
 
-  const nuevoAlumno = await Alumnos.create({
-  nombre: nombre.trim(),
-  apellido: apellido?.trim() || "",
-  matricula: matricula.trim(),
-  tutor: tutor.trim(),
-  telefonoTutor: telefonoTutor?.trim() || null,
-  userId: usuario.id,
-});
+    await nuevoAlumno.setGrados(grupos, { transaction });
+    await transaction.commit();
 
-await nuevoAlumno.addGrado(grado.id);
+    const alumnoCreado = await buscarAlumno(nuevoAlumno.uuid);
 
     return res.status(201).json({
-      msg: "Usuario vinculado como alumno correctamente",
-      alumno: {
-        id: nuevoAlumno.id,
-        uuid: nuevoAlumno.uuid,
-      },
+      msg: "Alumno registrado y asignado correctamente",
+      alumno: alumnoCreado,
     });
   } catch (error) {
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
     console.error("Error al crear alumno:", error);
 
-    if (error.name === "SequelizeUniqueConstraintError") {
+    if (esErrorUnico(error)) {
       return res.status(409).json({
         msg: "La matrícula o el usuario ya están registrados",
       });
     }
 
-    return res.status(500).json({
-      msg: error.message,
-    });
+    return res.status(500).json({ msg: "No fue posible crear el alumno" });
   }
 };
 
 export const updateAlumnos = async (req, res) => {
+  const transaction = await db.transaction();
+
   try {
+    if (
+      req.role !== ROLES.ADMINISTRADOR &&
+      req.role !== ROLES.MAESTRO
+    ) {
+      await transaction.rollback();
+      return res.status(403).json({
+        msg: "No tienes permiso para actualizar alumnos",
+      });
+    }
+
     const alumno = await Alumnos.findOne({
-      where: {
-        uuid: req.params.id,
-      },
+      where: { uuid: req.params.id },
+      include: [
+        {
+          model: Grados,
+          as: "grados",
+          attributes: ["id", "maestroId"],
+          through: { attributes: [] },
+        },
+      ],
+      transaction,
     });
 
     if (!alumno) {
-      return res.status(404).json({
-        msg: "Alumno no encontrado",
+      await transaction.rollback();
+      return res.status(404).json({ msg: "Alumno no encontrado" });
+    }
+
+    if (
+      req.role === ROLES.MAESTRO &&
+      !(await maestroPuedeGestionarAlumno(
+        req.userId,
+        alumno.id,
+        { transaction },
+      ))
+    ) {
+      await transaction.rollback();
+      return res.status(403).json({
+        msg: "El alumno no pertenece a uno de tus grupos",
       });
     }
 
@@ -290,35 +365,45 @@ export const updateAlumnos = async (req, res) => {
       tutor,
       telefonoTutor,
       gradoId,
+      gradoIds,
     } = req.body;
 
     const updateData = {};
+    const seEnviaronGrados =
+      gradoId !== undefined || gradoIds !== undefined;
+    const grupos = seEnviaronGrados
+      ? normalizarIds(gradoId, gradoIds)
+      : null;
 
-    if (typeof nombre === "string") {
+    if (nombre !== undefined) {
+      if (typeof nombre !== "string" || !nombre.trim()) {
+        await transaction.rollback();
+        return res.status(400).json({ msg: "El nombre es obligatorio" });
+      }
       updateData.nombre = nombre.trim();
     }
 
-    if (typeof apellido === "string") {
+    if (apellido !== undefined) {
+      if (typeof apellido !== "string") {
+        await transaction.rollback();
+        return res.status(400).json({ msg: "El apellido no es válido" });
+      }
       updateData.apellido = apellido.trim();
     }
 
-    if (typeof matricula === "string") {
-      if (!matricula.trim()) {
-        return res.status(400).json({
-          msg: "La matrícula es obligatoria",
-        });
+    if (matricula !== undefined) {
+      if (typeof matricula !== "string" || !matricula.trim()) {
+        await transaction.rollback();
+        return res.status(400).json({ msg: "La matrícula es obligatoria" });
       }
-
       updateData.matricula = matricula.trim();
     }
 
-    if (typeof tutor === "string") {
-      if (!tutor.trim()) {
-        return res.status(400).json({
-          msg: "El tutor es obligatorio",
-        });
+    if (tutor !== undefined) {
+      if (typeof tutor !== "string" || !tutor.trim()) {
+        await transaction.rollback();
+        return res.status(400).json({ msg: "El tutor es obligatorio" });
       }
-
       updateData.tutor = tutor.trim();
     }
 
@@ -329,81 +414,131 @@ export const updateAlumnos = async (req, res) => {
           : null;
     }
 
-   if (gradoId !== undefined) {
-  const grado = await Grados.findByPk(Number(gradoId));
-
-  if (!grado) {
-    return res.status(400).json({
-      msg: "El grupo seleccionado no existe",
-    });
-  }
-
-  if (
-    req.role === "maestro" &&
-    Number(grado.maestroId) !== Number(req.userId)
-  ) {
-    return res.status(403).json({
-      msg: "No puedes asignar alumnos a grupos de otro maestro",
-    });
-  }
-
-  await alumno.setGrados([grado.id]);
-}
-
-    if (Object.keys(updateData).length === 0) {
+    if (
+      Object.keys(updateData).length === 0 &&
+      !seEnviaronGrados
+    ) {
+      await transaction.rollback();
       return res.status(400).json({
         msg: "No se proporcionaron datos para actualizar",
       });
     }
 
-    await alumno.update(updateData);
+    if (seEnviaronGrados) {
+      if (!grupos) {
+        await transaction.rollback();
+        return res.status(400).json({
+          msg: "Debes seleccionar al menos un grupo válido",
+        });
+      }
+
+      const errorGrados = await validarGrados(
+        grupos,
+        req.role,
+        req.userId,
+        transaction,
+      );
+
+      if (errorGrados) {
+        await transaction.rollback();
+        return res
+          .status(errorGrados.status)
+          .json({ msg: errorGrados.msg });
+      }
+    }
+
+    if (Object.keys(updateData).length > 0) {
+      await alumno.update(updateData, { transaction });
+    }
+
+    if (seEnviaronGrados) {
+      if (req.role === ROLES.ADMINISTRADOR) {
+        await alumno.setGrados(grupos, { transaction });
+      } else {
+        const gruposAjenos = alumno.grados
+          .filter(
+            (grado) =>
+              Number(grado.maestroId) !== Number(req.userId),
+          )
+          .map((grado) => Number(grado.id));
+
+        await alumno.setGrados(
+          [...new Set([...gruposAjenos, ...grupos])],
+          { transaction },
+        );
+      }
+    }
+
+    await transaction.commit();
+    const alumnoActualizado = await buscarAlumno(alumno.uuid);
 
     return res.status(200).json({
       msg: "Alumno actualizado correctamente",
+      alumno: alumnoActualizado,
     });
   } catch (error) {
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
     console.error("Error al actualizar alumno:", error);
 
-    if (error.name === "SequelizeUniqueConstraintError") {
+    if (esErrorUnico(error)) {
       return res.status(409).json({
         msg: "La matrícula ya está registrada",
       });
     }
 
     return res.status(500).json({
-      msg: error.message,
+      msg: "No fue posible actualizar el alumno",
     });
   }
 };
 
 export const deleteAlumnos = async (req, res) => {
   try {
-    const alumno = await Alumnos.findOne({
-      where: {
-        uuid: req.params.id,
-      },
-    });
-
-    if (!alumno) {
-      return res.status(404).json({
-        msg: "Alumno no encontrado",
+    if (req.role !== ROLES.ADMINISTRADOR) {
+      return res.status(403).json({
+        msg: "Solo un administrador puede eliminar alumnos",
       });
     }
 
-    /*
-     * Solo elimina el perfil de alumno.
-     * El usuario permanece disponible para volver a vincularse.
-     */
+    const alumno = await Alumnos.findOne({
+      where: { uuid: req.params.id },
+    });
+
+    if (!alumno) {
+      return res.status(404).json({ msg: "Alumno no encontrado" });
+    }
+
+    const [asistencias, incidencias, reportes] = await Promise.all([
+      alumno.countAsistencias(),
+      alumno.countIncidencias(),
+      alumno.countReportes(),
+    ]);
+
+    if (asistencias || incidencias || reportes) {
+      return res.status(409).json({
+        msg: "No se puede eliminar el alumno porque tiene historial relacionado",
+        relaciones: { asistencias, incidencias, reportes },
+      });
+    }
+
     await alumno.destroy();
 
     return res.status(200).json({
-      msg: "Alumno eliminado correctamente",
+      msg: "Perfil de alumno eliminado correctamente; el usuario permanece activo",
     });
   } catch (error) {
     console.error("Error al eliminar alumno:", error);
 
+    if (esErrorRelacion(error)) {
+      return res.status(409).json({
+        msg: "No se puede eliminar el alumno porque tiene registros relacionados",
+      });
+    }
+
     return res.status(500).json({
-      msg: error.message,
+      msg: "No fue posible eliminar el alumno",
     });
   }
 };

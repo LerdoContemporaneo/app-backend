@@ -1,6 +1,5 @@
 import { Sequelize } from "sequelize";
 import db from "../config/db.js";
-import Alumnos from "./AlumnosModel.js";
 
 const { DataTypes } = Sequelize;
 
@@ -16,6 +15,7 @@ const Reportes = db.define(
       type: DataTypes.STRING,
       defaultValue: DataTypes.UUIDV4,
       allowNull: false,
+      unique: true,
       validate: {
         notEmpty: true,
       },
@@ -23,24 +23,45 @@ const Reportes = db.define(
     titulo: {
       type: DataTypes.STRING,
       allowNull: false,
+      validate: {
+        notEmpty: true,
+      },
     },
     contenido: {
       type: DataTypes.TEXT,
       allowNull: false,
+      validate: {
+        notEmpty: true,
+      },
     },
-    // nueva columna para registrar el autor del reporte agregar resto del backend
+    alumnoId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      validate: {
+        isInt: true,
+        min: 1,
+      },
+    },
     maestroId: {
       type: DataTypes.INTEGER,
-      allowNull: false, // Todo reporte DEBE tener un autor
+      allowNull: false,
       references: {
-        model: 'users', // Apunta a la tabla de usuarios
-        key: 'id'
-      }
-    }
+        model: "users",
+        key: "id",
+      },
+    },
+    gradoId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      validate: {
+        isInt: true,
+        min: 1,
+      },
+    },
   },
   {
     freezeTableName: true,
-  }
+  },
 );
 
 export default Reportes;

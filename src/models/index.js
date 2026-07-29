@@ -9,40 +9,31 @@ import Incidencia from "./IncidenciaModel.js";
 import Reportes from "./ReportesModel.js";
 import Tareas from "./TareasModel.js";
 
-// ======================================================
-// 1. USUARIO ↔ PERFIL DE ALUMNO
-// ======================================================
-
 Users.hasOne(Alumnos, {
   foreignKey: "userId",
   onDelete: "CASCADE",
+  onUpdate: "CASCADE",
 });
 
 Alumnos.belongsTo(Users, {
   foreignKey: "userId",
   onDelete: "CASCADE",
+  onUpdate: "CASCADE",
 });
-
-// ======================================================
-// 2. MAESTRO ↔ GRADOS
-// ======================================================
 
 Users.hasMany(Grados, {
   foreignKey: "maestroId",
   as: "grados",
   onDelete: "SET NULL",
+  onUpdate: "CASCADE",
 });
 
 Grados.belongsTo(Users, {
   foreignKey: "maestroId",
   as: "maestro",
   onDelete: "SET NULL",
+  onUpdate: "CASCADE",
 });
-
-// ======================================================
-// 3. ALUMNOS ↔ GRADOS
-// Relación muchos-a-muchos
-// ======================================================
 
 Alumnos.belongsToMany(Grados, {
   through: {
@@ -53,6 +44,7 @@ Alumnos.belongsToMany(Grados, {
   otherKey: "gradoId",
   as: "grados",
   onDelete: "CASCADE",
+  onUpdate: "CASCADE",
 });
 
 Grados.belongsToMany(Alumnos, {
@@ -64,115 +56,108 @@ Grados.belongsToMany(Alumnos, {
   otherKey: "alumnoId",
   as: "alumnos",
   onDelete: "CASCADE",
+  onUpdate: "CASCADE",
 });
-
-// ======================================================
-// 4. MAESTROS ↔ ASISTENCIA DE MAESTROS
-// ======================================================
 
 Users.hasMany(AsistenciaMaestro, {
   foreignKey: "maestroId",
   as: "asistenciasMaestro",
   onDelete: "CASCADE",
+  onUpdate: "CASCADE",
 });
 
 AsistenciaMaestro.belongsTo(Users, {
   foreignKey: "maestroId",
   as: "maestro",
   onDelete: "CASCADE",
+  onUpdate: "CASCADE",
 });
-
-// ======================================================
-// 5. ALUMNOS ↔ ASISTENCIAS
-// ======================================================
 
 Alumnos.hasMany(Asistencia, {
   foreignKey: "alumnoId",
   as: "asistencias",
   onDelete: "CASCADE",
+  onUpdate: "CASCADE",
 });
 
 Asistencia.belongsTo(Alumnos, {
   foreignKey: "alumnoId",
   as: "alumno",
   onDelete: "CASCADE",
+  onUpdate: "CASCADE",
 });
-
-// ======================================================
-// 6. GRADOS ↔ ASISTENCIAS
-// ======================================================
 
 Grados.hasMany(Asistencia, {
   foreignKey: "gradoId",
   as: "asistencias",
-  onDelete: "SET NULL",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
 });
 
 Asistencia.belongsTo(Grados, {
   foreignKey: "gradoId",
   as: "grado",
-  onDelete: "SET NULL",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
 });
-
-// ======================================================
-// 7. ALUMNOS ↔ INCIDENCIAS
-// ======================================================
 
 Alumnos.hasMany(Incidencia, {
   foreignKey: "alumnoId",
   as: "incidencias",
   onDelete: "CASCADE",
+  onUpdate: "CASCADE",
 });
 
 Incidencia.belongsTo(Alumnos, {
   foreignKey: "alumnoId",
   as: "alumno",
   onDelete: "CASCADE",
+  onUpdate: "CASCADE",
 });
-
-// ======================================================
-// 8. REPORTES
-// ======================================================
 
 Alumnos.hasMany(Reportes, {
   foreignKey: "alumnoId",
   as: "reportes",
   onDelete: "CASCADE",
+  onUpdate: "CASCADE",
 });
 
 Reportes.belongsTo(Alumnos, {
   foreignKey: "alumnoId",
   as: "alumno",
   onDelete: "CASCADE",
+  onUpdate: "CASCADE",
 });
 
+// maestroId es obligatorio en ReportesModel, por eso se usa RESTRICT
+// en lugar de SET NULL.
 Users.hasMany(Reportes, {
   foreignKey: "maestroId",
   as: "reportes",
-  onDelete: "SET NULL",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
 });
 
 Reportes.belongsTo(Users, {
   foreignKey: "maestroId",
   as: "maestro",
-  onDelete: "SET NULL",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
 });
 
 Grados.hasMany(Reportes, {
   foreignKey: "gradoId",
   as: "reportes",
-  onDelete: "SET NULL",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
 });
 
 Reportes.belongsTo(Grados, {
   foreignKey: "gradoId",
   as: "grado",
-  onDelete: "SET NULL",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
 });
-
-// ======================================================
-// 9. GRADOS ↔ TAREAS
-// ======================================================
 
 Grados.hasMany(Tareas, {
   foreignKey: "gradoId",

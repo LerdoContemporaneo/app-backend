@@ -22,7 +22,7 @@ const Tareas = db.define("tareas",
     },
     descripcion: {
       type: DataTypes.TEXT,
-      allowNull: false,
+     descripcion: descripcion?.trim() || null,
       validate: {
         notEmpty: true,
       },
