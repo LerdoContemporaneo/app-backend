@@ -3,16 +3,20 @@ import {
   Grados,
   Users,
 } from "../models/index.js";
-import { Op } from "sequelize";
+
 
 const gradoConMaestro = {
   model: Grados,
+  as: "grados",
   attributes: [
     "id",
     "uuid",
     "nombre",
     "maestroId",
   ],
+  through: {
+    attributes: [],
+  },
   include: [
     {
       model: Users,
@@ -54,11 +58,6 @@ export const getAlumnos = async (req, res) => {
 
       const gradosIds = grados.map((grado) => grado.id);
 
-      whereCondition = {
-        gradoId: {
-          [Op.in]: gradosIds,
-        },
-      };
     }
 
     const alumnos = await Alumnos.findAll({
@@ -129,14 +128,18 @@ export const getAlumnoById = async (req, res) => {
 
     // Un maestro solamente puede consultar alumnos
     // pertenecientes a uno de sus grupos.
-    if (
-      req.role === "maestro" &&
-      Number(alumno.grado?.maestroId) !== Number(req.userId)
-    ) {
-      return res.status(403).json({
-        msg: "Acceso denegado: el alumno no pertenece a uno de tus grupos",
-      });
-    }
+  if (req.role === "maestro") {
+  const perteneceAlMaestro = alumno.grados?.some(
+    (grado) =>
+      Number(grado.maestroId) === Number(req.userId),
+  );
+
+  if (!perteneceAlMaestro) {
+    return res.status(403).json({
+      msg: "El alumno no pertenece a uno de tus grupos",
+    });
+  }
+}
 
     return res.status(200).json(alumno);
   } catch (error) {
@@ -233,15 +236,16 @@ export const createAlumnos = async (req, res) => {
       });
     }
 
-    const nuevoAlumno = await Alumnos.create({
-      nombre: nombre.trim(),
-      apellido: apellido?.trim() || "",
-      matricula: matricula.trim(),
-      tutor: tutor.trim(),
-      telefonoTutor: telefonoTutor?.trim() || null,
-      gradoId: grado.id,
-      userId: usuario.id,
-    });
+  const nuevoAlumno = await Alumnos.create({
+  nombre: nombre.trim(),
+  apellido: apellido?.trim() || "",
+  matricula: matricula.trim(),
+  tutor: tutor.trim(),
+  telefonoTutor: telefonoTutor?.trim() || null,
+  userId: usuario.id,
+});
+
+await nuevoAlumno.addGrado(grado.id);
 
     return res.status(201).json({
       msg: "Usuario vinculado como alumno correctamente",
@@ -325,29 +329,26 @@ export const updateAlumnos = async (req, res) => {
           : null;
     }
 
-    if (gradoId !== undefined) {
-      const grado = await Grados.findByPk(gradoId, {
-        attributes: [
-          "id",
-          "nombre",
-          "maestroId",
-        ],
-      });
+   if (gradoId !== undefined) {
+  const grado = await Grados.findByPk(Number(gradoId));
 
-      if (!grado) {
-        return res.status(400).json({
-          msg: "El grupo seleccionado no existe",
-        });
-      }
+  if (!grado) {
+    return res.status(400).json({
+      msg: "El grupo seleccionado no existe",
+    });
+  }
 
-      if (!grado.maestroId) {
-        return res.status(400).json({
-          msg: "El grupo seleccionado no tiene un maestro responsable",
-        });
-      }
+  if (
+    req.role === "maestro" &&
+    Number(grado.maestroId) !== Number(req.userId)
+  ) {
+    return res.status(403).json({
+      msg: "No puedes asignar alumnos a grupos de otro maestro",
+    });
+  }
 
-      updateData.gradoId = grado.id;
-    }
+  await alumno.setGrados([grado.id]);
+}
 
     if (Object.keys(updateData).length === 0) {
       return res.status(400).json({

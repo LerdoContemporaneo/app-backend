@@ -1,23 +1,49 @@
-import Tareas from "../models/TareasModel.js";
-import Alumnos from "../models/AlumnosModel.js";
-import Grados from "../models/GradosModel.js";
+import {
+  Tareas,
+  Alumnos,
+  Grados,
+} from "../models/index.js";
 import { Op } from "sequelize";
 
-/**
- * Comprueba que el alumno pertenezca a por lo menos
- * un grupo asignado al maestro autenticado.
- */
-const maestroPuedeGestionarAlumno = async (maestroId, alumnoId) => {
+const incluirGrado = {
+  model: Grados,
+  as: "grado",
+  attributes: [
+    "id",
+    "uuid",
+    "nombre",
+    "maestroId",
+  ],
+};
+
+const obtenerGradosDelMaestro = async (maestroId) => {
+  const grados = await Grados.findAll({
+    where: {
+      maestroId,
+    },
+    attributes: ["id"],
+  });
+
+  return grados.map((grado) => grado.id);
+};
+
+const alumnoPerteneceAlGrado = async (userId, gradoId) => {
   const alumno = await Alumnos.findOne({
-    where: { id: alumnoId },
+    where: {
+      userId,
+    },
     attributes: ["id"],
     include: [
       {
         model: Grados,
         as: "grados",
-        attributes: ["id", "maestroId"],
-        where: { maestroId },
-        through: { attributes: [] },
+        attributes: ["id"],
+        where: {
+          id: gradoId,
+        },
+        through: {
+          attributes: [],
+        },
         required: true,
       },
     ],
@@ -26,9 +52,63 @@ const maestroPuedeGestionarAlumno = async (maestroId, alumnoId) => {
   return Boolean(alumno);
 };
 
+const obtenerGradoAutorizado = async (
+  gradoId,
+  role,
+  userId,
+) => {
+  const grado = await Grados.findByPk(gradoId, {
+    attributes: [
+      "id",
+      "uuid",
+      "nombre",
+      "maestroId",
+    ],
+  });
+
+  if (!grado) {
+    return {
+      error: {
+        status: 404,
+        msg: "Grupo no encontrado",
+      },
+    };
+  }
+
+  if (
+    role === "maestro" &&
+    Number(grado.maestroId) !== Number(userId)
+  ) {
+    return {
+      error: {
+        status: 403,
+        msg: "No puedes administrar tareas de otro maestro",
+      },
+    };
+  }
+
+  if (
+    role !== "maestro" &&
+    role !== "administrador"
+  ) {
+    return {
+      error: {
+        status: 403,
+        msg: "No tienes permiso para administrar tareas",
+      },
+    };
+  }
+
+  return {
+    grado,
+  };
+};
+
 const buscarTarea = async (uuid) => {
   return Tareas.findOne({
-    where: { uuid },
+    where: {
+      uuid,
+    },
     attributes: [
       "id",
       "uuid",
@@ -36,30 +116,9 @@ const buscarTarea = async (uuid) => {
       "descripcion",
       "fechaAsignacion",
       "fechaEntrega",
-      "alumnoId",
+      "gradoId",
     ],
-    include: [
-      {
-        model: Alumnos,
-        as: "alumno",
-        attributes: [
-          "id",
-          "uuid",
-          "nombre",
-          "apellido",
-          "matricula",
-          "userId",
-        ],
-        include: [
-          {
-            model: Grados,
-            as: "grados",
-            attributes: ["id", "uuid", "nombre", "maestroId"],
-            through: { attributes: [] },
-          },
-        ],
-      },
-    ],
+    include: [incluirGrado],
   });
 };
 
@@ -68,10 +127,31 @@ export const getTareas = async (req, res) => {
     const { role, userId } = req;
     let whereCondition = {};
 
-    if (role === "alumno") {
+    if (role === "maestro") {
+      const gradosIds =
+        await obtenerGradosDelMaestro(userId);
+
+      whereCondition = {
+        gradoId: {
+          [Op.in]: gradosIds,
+        },
+      };
+    } else if (role === "alumno") {
       const alumno = await Alumnos.findOne({
-        where: { userId },
+        where: {
+          userId,
+        },
         attributes: ["id"],
+        include: [
+          {
+            model: Grados,
+            as: "grados",
+            attributes: ["id"],
+            through: {
+              attributes: [],
+            },
+          },
+        ],
       });
 
       if (!alumno) {
@@ -80,40 +160,22 @@ export const getTareas = async (req, res) => {
         });
       }
 
+      const gradosIds = alumno.grados.map(
+        (grado) => grado.id,
+      );
+
       whereCondition = {
-        alumnoId: alumno.id,
+        gradoId: {
+          [Op.in]: gradosIds,
+        },
       };
-    } else if (role === "maestro") {
-      const alumnos = await Alumnos.findAll({
-        attributes: ["id"],
-        include: [
-          {
-            model: Grados,
-            as: "grados",
-            attributes: [],
-            where: { maestroId: userId },
-            through: { attributes: [] },
-            required: true,
-          },
-        ],
-      });
-
-      const alumnosIds = [
-        ...new Set(alumnos.map((alumno) => alumno.id)),
-      ];
-
-      // Evita devolver tareas si el maestro no tiene alumnos.
-      whereCondition =
-        alumnosIds.length > 0
-          ? { alumnoId: { [Op.in]: alumnosIds } }
-          : { alumnoId: null };
     } else if (role !== "administrador") {
       return res.status(403).json({
         msg: "No tienes permiso para consultar tareas",
       });
     }
 
-    const response = await Tareas.findAll({
+    const tareas = await Tareas.findAll({
       attributes: [
         "id",
         "uuid",
@@ -121,37 +183,17 @@ export const getTareas = async (req, res) => {
         "descripcion",
         "fechaAsignacion",
         "fechaEntrega",
-        "alumnoId",
+        "gradoId",
       ],
       where: whereCondition,
-      include: [
-        {
-          model: Alumnos,
-          as: "alumno",
-          attributes: [
-            "id",
-            "uuid",
-            "nombre",
-            "apellido",
-            "matricula",
-          ],
-          include: [
-            {
-              model: Grados,
-              as: "grados",
-              attributes: ["id", "uuid", "nombre", "maestroId"],
-              through: { attributes: [] },
-            },
-          ],
-        },
-      ],
+      include: [incluirGrado],
       order: [
         ["fechaEntrega", "ASC"],
         ["id", "DESC"],
       ],
     });
 
-    return res.status(200).json(response);
+    return res.status(200).json(tareas);
   } catch (error) {
     console.error("Error al obtener tareas:", error);
 
@@ -172,21 +214,24 @@ export const getTareasById = async (req, res) => {
       });
     }
 
-    if (role === "alumno") {
-      if (Number(tarea.alumno?.userId) !== Number(userId)) {
+    if (role === "maestro") {
+      if (
+        Number(tarea.grado?.maestroId) !==
+        Number(userId)
+      ) {
         return res.status(403).json({
-          msg: "No puedes consultar tareas de otros alumnos",
+          msg: "No puedes consultar tareas de otro maestro",
         });
       }
-    } else if (role === "maestro") {
-      const autorizado = await maestroPuedeGestionarAlumno(
+    } else if (role === "alumno") {
+      const autorizado = await alumnoPerteneceAlGrado(
         userId,
-        tarea.alumnoId
+        tarea.gradoId,
       );
 
       if (!autorizado) {
         return res.status(403).json({
-          msg: "El alumno no pertenece a ninguno de tus grupos",
+          msg: "Esta tarea no pertenece a uno de tus grupos",
         });
       }
     } else if (role !== "administrador") {
@@ -208,59 +253,48 @@ export const getTareasById = async (req, res) => {
 export const createTareas = async (req, res) => {
   try {
     const { role, userId } = req;
+
     const {
       titulo,
       descripcion,
       fechaAsignacion,
       fechaEntrega,
-      alumnoId,
+      gradoId,
     } = req.body;
 
-    const alumnoIdNumerico = Number(alumnoId);
+    const gradoIdNumerico = Number(gradoId);
 
     if (
       !titulo?.trim() ||
       !fechaAsignacion ||
       !fechaEntrega ||
-      !Number.isInteger(alumnoIdNumerico) ||
-      alumnoIdNumerico <= 0
+      !Number.isInteger(gradoIdNumerico) ||
+      gradoIdNumerico <= 0
     ) {
       return res.status(400).json({
-        msg: "Título, fechas y alumno son obligatorios",
+        msg: "Título, fechas y grupo son obligatorios",
       });
     }
 
-    if (new Date(fechaEntrega) < new Date(fechaAsignacion)) {
+    if (
+      new Date(fechaEntrega) <
+      new Date(fechaAsignacion)
+    ) {
       return res.status(400).json({
         msg: "La fecha de entrega no puede ser anterior a la asignación",
       });
     }
 
-    const alumno = await Alumnos.findByPk(alumnoIdNumerico, {
-      attributes: ["id"],
-    });
+    const resultado = await obtenerGradoAutorizado(
+      gradoIdNumerico,
+      role,
+      userId,
+    );
 
-    if (!alumno) {
-      return res.status(404).json({
-        msg: "Alumno no encontrado",
-      });
-    }
-
-    if (role === "maestro") {
-      const autorizado = await maestroPuedeGestionarAlumno(
-        userId,
-        alumnoIdNumerico
-      );
-
-      if (!autorizado) {
-        return res.status(403).json({
-          msg: "No puedes asignar tareas a un alumno fuera de tus grupos",
-        });
-      }
-    } else if (role !== "administrador") {
-      return res.status(403).json({
-        msg: "No tienes permiso para crear tareas",
-      });
+    if (resultado.error) {
+      return res
+        .status(resultado.error.status)
+        .json({ msg: resultado.error.msg });
     }
 
     const tarea = await Tareas.create({
@@ -268,12 +302,14 @@ export const createTareas = async (req, res) => {
       descripcion: descripcion?.trim() || null,
       fechaAsignacion,
       fechaEntrega,
-      alumnoId: alumnoIdNumerico,
+      gradoId: gradoIdNumerico,
     });
 
+    const tareaCreada = await buscarTarea(tarea.uuid);
+
     return res.status(201).json({
-      msg: "Tarea creada correctamente",
-      tarea,
+      msg: "Tarea asignada al grupo correctamente",
+      tarea: tareaCreada,
     });
   } catch (error) {
     console.error("Error al crear tarea:", error);
@@ -289,7 +325,9 @@ export const updateTareas = async (req, res) => {
     const { role, userId } = req;
 
     const tarea = await Tareas.findOne({
-      where: { uuid: req.params.id },
+      where: {
+        uuid: req.params.id,
+      },
     });
 
     if (!tarea) {
@@ -303,38 +341,45 @@ export const updateTareas = async (req, res) => {
       descripcion,
       fechaAsignacion,
       fechaEntrega,
-      alumnoId,
+      gradoId,
     } = req.body;
 
-    const alumnoIdDestino =
-      alumnoId !== undefined ? Number(alumnoId) : Number(tarea.alumnoId);
+    const gradoIdDestino =
+      gradoId !== undefined
+        ? Number(gradoId)
+        : Number(tarea.gradoId);
 
-    if (!Number.isInteger(alumnoIdDestino) || alumnoIdDestino <= 0) {
+    if (
+      !Number.isInteger(gradoIdDestino) ||
+      gradoIdDestino <= 0
+    ) {
       return res.status(400).json({
-        msg: "El alumno seleccionado no es válido",
+        msg: "El grupo seleccionado no es válido",
       });
     }
 
-    if (role === "maestro") {
-      const puedeGestionarActual = await maestroPuedeGestionarAlumno(
-        userId,
-        tarea.alumnoId
-      );
+    const gradoActual = await obtenerGradoAutorizado(
+      tarea.gradoId,
+      role,
+      userId,
+    );
 
-      const puedeGestionarDestino = await maestroPuedeGestionarAlumno(
-        userId,
-        alumnoIdDestino
-      );
+    if (gradoActual.error) {
+      return res
+        .status(gradoActual.error.status)
+        .json({ msg: gradoActual.error.msg });
+    }
 
-      if (!puedeGestionarActual || !puedeGestionarDestino) {
-        return res.status(403).json({
-          msg: "No puedes modificar tareas de alumnos fuera de tus grupos",
-        });
-      }
-    } else if (role !== "administrador") {
-      return res.status(403).json({
-        msg: "No tienes permiso para actualizar tareas",
-      });
+    const gradoDestino = await obtenerGradoAutorizado(
+      gradoIdDestino,
+      role,
+      userId,
+    );
+
+    if (gradoDestino.error) {
+      return res
+        .status(gradoDestino.error.status)
+        .json({ msg: gradoDestino.error.msg });
     }
 
     const asignacionFinal =
@@ -343,26 +388,35 @@ export const updateTareas = async (req, res) => {
     const entregaFinal =
       fechaEntrega ?? tarea.fechaEntrega;
 
-    if (new Date(entregaFinal) < new Date(asignacionFinal)) {
+    if (
+      new Date(entregaFinal) <
+      new Date(asignacionFinal)
+    ) {
       return res.status(400).json({
         msg: "La fecha de entrega no puede ser anterior a la asignación",
       });
     }
 
     await tarea.update({
-      titulo: titulo?.trim() ?? tarea.titulo,
+      titulo:
+        typeof titulo === "string"
+          ? titulo.trim()
+          : tarea.titulo,
       descripcion:
         descripcion !== undefined
-          ? descripcion.trim() || null
+          ? descripcion?.trim() || null
           : tarea.descripcion,
       fechaAsignacion: asignacionFinal,
       fechaEntrega: entregaFinal,
-      alumnoId: alumnoIdDestino,
+      gradoId: gradoIdDestino,
     });
+
+    const tareaActualizada =
+      await buscarTarea(tarea.uuid);
 
     return res.status(200).json({
       msg: "Tarea actualizada correctamente",
-      tarea,
+      tarea: tareaActualizada,
     });
   } catch (error) {
     console.error("Error al actualizar tarea:", error);
@@ -378,7 +432,9 @@ export const deleteTareas = async (req, res) => {
     const { role, userId } = req;
 
     const tarea = await Tareas.findOne({
-      where: { uuid: req.params.id },
+      where: {
+        uuid: req.params.id,
+      },
     });
 
     if (!tarea) {
@@ -387,21 +443,16 @@ export const deleteTareas = async (req, res) => {
       });
     }
 
-    if (role === "maestro") {
-      const autorizado = await maestroPuedeGestionarAlumno(
-        userId,
-        tarea.alumnoId
-      );
+    const resultado = await obtenerGradoAutorizado(
+      tarea.gradoId,
+      role,
+      userId,
+    );
 
-      if (!autorizado) {
-        return res.status(403).json({
-          msg: "No puedes eliminar tareas de alumnos fuera de tus grupos",
-        });
-      }
-    } else if (role !== "administrador") {
-      return res.status(403).json({
-        msg: "No tienes permiso para eliminar tareas",
-      });
+    if (resultado.error) {
+      return res
+        .status(resultado.error.status)
+        .json({ msg: resultado.error.msg });
     }
 
     await tarea.destroy();

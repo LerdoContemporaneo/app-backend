@@ -171,19 +171,21 @@ Reportes.belongsTo(Grados, {
 });
 
 // ======================================================
-// 9. ALUMNOS ↔ TAREAS INDIVIDUALES
+// 9. GRADOS ↔ TAREAS
 // ======================================================
 
-Alumnos.hasMany(Tareas, {
-  foreignKey: "alumnoId",
+Grados.hasMany(Tareas, {
+  foreignKey: "gradoId",
   as: "tareas",
   onDelete: "CASCADE",
+  onUpdate: "CASCADE",
 });
 
-Tareas.belongsTo(Alumnos, {
-  foreignKey: "alumnoId",
-  as: "alumno",
+Tareas.belongsTo(Grados, {
+  foreignKey: "gradoId",
+  as: "grado",
   onDelete: "CASCADE",
+  onUpdate: "CASCADE",
 });
 
 export {
