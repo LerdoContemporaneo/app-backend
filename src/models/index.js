@@ -122,6 +122,26 @@ Alumnos.hasMany(Reportes, {
   onUpdate: "CASCADE",
 });
 
+Incidencia.belongsTo(Grados, {
+  foreignKey: "gradoId",
+  as: "grado",
+});
+
+Grados.hasMany(Incidencia, {
+  foreignKey: "gradoId",
+  as: "incidencias",
+});
+
+Incidencia.belongsTo(Users, {
+  foreignKey: "maestroId",
+  as: "maestro",
+});
+
+Users.hasMany(Incidencia, {
+  foreignKey: "maestroId",
+  as: "incidenciasCreadas",
+});
+
 Reportes.belongsTo(Alumnos, {
   foreignKey: "alumnoId",
   as: "alumno",

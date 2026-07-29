@@ -3,14 +3,15 @@ import {
   Alumnos,
   Grados,
   Incidencia,
+  Users,
 } from "../models/index.js";
+
 import {
   ROLES,
+  alumnoPerteneceAlGrado,
   enteroPositivo,
   esFechaValida,
-  hoy,
-  maestroPuedeGestionarAlumno,
-  obtenerAlumnoIdsDelMaestro,
+  obtenerGradosIdsDelMaestro,
   obtenerPerfilAlumno,
 } from "../utils/controllerUtils.js";
 
@@ -21,64 +22,133 @@ const atributos = [
   "descripcion",
   "fecha",
   "alumnoId",
+  "gradoId",
+  "maestroId",
 ];
 
-const incluirAlumno = {
-  model: Alumnos,
-  as: "alumno",
-  attributes: [
-    "id",
-    "uuid",
-    "nombre",
-    "apellido",
-    "matricula",
-    "tutor",
-    "telefonoTutor",
-  ],
-  include: [
-    {
-      model: Grados,
-      as: "grados",
-      attributes: ["id", "uuid", "nombre", "maestroId"],
-      through: { attributes: [] },
-    },
-  ],
+const relaciones = [
+  {
+    model: Alumnos,
+    as: "alumno",
+    attributes: [
+      "id",
+      "uuid",
+      "nombre",
+      "apellido",
+      "matricula",
+      "tutor",
+      "telefonoTutor",
+    ],
+  },
+  {
+    model: Grados,
+    as: "grado",
+    attributes: [
+      "id",
+      "uuid",
+      "nombre",
+      "maestroId",
+    ],
+  },
+  {
+    model: Users,
+    as: "maestro",
+    attributes: [
+      "id",
+      "uuid",
+      "name",
+      "email",
+    ],
+  },
+];
+
+/**
+ * Obtiene la fecha actual de acuerdo con la zona horaria
+ * de Lerdo y Gómez Palacio.
+ */
+const fechaHoyMonterrey = () => {
+  const partes = new Intl.DateTimeFormat("es-MX", {
+    timeZone: "America/Monterrey",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const obtener = (tipo) =>
+    partes.find((parte) => parte.type === tipo)?.value;
+
+  return `${obtener("year")}-${obtener("month")}-${obtener("day")}`;
 };
 
+/**
+ * Busca una incidencia por UUID e incluye sus relaciones.
+ */
 const buscarIncidencia = (uuid) =>
   Incidencia.findOne({
-    where: { uuid },
+    where: {
+      uuid,
+    },
     attributes: atributos,
-    include: [incluirAlumno],
+    include: relaciones,
   });
 
-const validarAcceso = async (incidencia, role, userId) => {
-  if (role === ROLES.ADMINISTRADOR) return null;
+/**
+ * Comprueba que un grupo pertenezca al maestro indicado.
+ */
+const maestroGestionaGrado = async (maestroId, gradoId) => {
+  const grado = await Grados.findOne({
+    where: {
+      id: gradoId,
+      maestroId,
+    },
+    attributes: ["id"],
+  });
+
+  return Boolean(grado);
+};
+
+/**
+ * Valida los permisos para consultar una incidencia.
+ */
+const validarAccesoLectura = async (
+  incidencia,
+  role,
+  userId,
+) => {
+  if (role === ROLES.ADMINISTRADOR) {
+    return null;
+  }
 
   if (role === ROLES.MAESTRO) {
-    const permitido = await maestroPuedeGestionarAlumno(
+    const permitido = await maestroGestionaGrado(
       userId,
-      incidencia.alumnoId,
+      incidencia.gradoId,
     );
 
-    return permitido
-      ? null
-      : {
-          status: 403,
-          msg: "El alumno no pertenece a uno de tus grupos",
-        };
+    if (permitido) {
+      return null;
+    }
+
+    return {
+      status: 403,
+      msg: "Esta incidencia no pertenece a uno de tus grupos",
+    };
   }
 
   if (role === ROLES.ALUMNO) {
     const perfil = await obtenerPerfilAlumno(userId);
 
-    return perfil &&
+    if (
+      perfil &&
       Number(perfil.id) === Number(incidencia.alumnoId)
-      ? null
-      : {
-          status: 403,
-          msg: "No puedes consultar incidencias de otro alumno",
-        };
+    ) {
+      return null;
+    }
+
+    return {
+      status: 403,
+      msg: "No puedes consultar incidencias de otro alumno",
+    };
   }
 
   return {
@@ -87,29 +157,57 @@ const validarAcceso = async (incidencia, role, userId) => {
   };
 };
 
-const validarAlumnoParaStaff = async (alumnoId, role, userId) => {
-  if (!alumnoId) {
-    return { status: 400, msg: "El alumno es obligatorio" };
+/**
+ * Valida los permisos para editar o eliminar una incidencia.
+ */
+const validarAccesoEscritura = async (
+  incidencia,
+  role,
+  userId,
+) => {
+  if (role === ROLES.ADMINISTRADOR) {
+    return null;
   }
 
-  const alumno = await Alumnos.findByPk(alumnoId, {
-    attributes: ["id"],
-  });
-
-  if (!alumno) {
-    return { status: 404, msg: "Alumno no encontrado" };
-  }
-
-  if (
-    role === ROLES.MAESTRO &&
-    !(await maestroPuedeGestionarAlumno(userId, alumnoId))
-  ) {
+  if (role !== ROLES.MAESTRO) {
     return {
       status: 403,
-      msg: "No puedes gestionar incidencias de alumnos ajenos a tus grupos",
+      msg: "No tienes permiso para administrar incidencias",
     };
   }
 
+  if (Number(incidencia.maestroId) !== Number(userId)) {
+    return {
+      status: 403,
+      msg: "Sólo el maestro que registró la incidencia puede modificarla",
+    };
+  }
+
+  const permitido = await maestroGestionaGrado(
+    userId,
+    incidencia.gradoId,
+  );
+
+  if (permitido) {
+    return null;
+  }
+
+  return {
+    status: 403,
+    msg: "Esta incidencia ya no pertenece a uno de tus grupos",
+  };
+};
+
+/**
+ * Valida que existan el alumno y el grupo, que estén
+ * relacionados y que el maestro tenga acceso al grupo.
+ */
+const validarAlumnoYGradoParaStaff = async ({
+  alumnoId,
+  gradoId,
+  role,
+  userId,
+}) => {
   if (
     role !== ROLES.MAESTRO &&
     role !== ROLES.ADMINISTRADOR
@@ -120,13 +218,106 @@ const validarAlumnoParaStaff = async (alumnoId, role, userId) => {
     };
   }
 
+  if (!alumnoId) {
+    return {
+      status: 400,
+      msg: "El alumno es obligatorio",
+    };
+  }
+
+  if (!gradoId) {
+    return {
+      status: 400,
+      msg: "El grupo es obligatorio",
+    };
+  }
+
+  const [alumno, grado] = await Promise.all([
+    Alumnos.findByPk(alumnoId, {
+      attributes: ["id"],
+    }),
+    Grados.findByPk(gradoId, {
+      attributes: [
+        "id",
+        "maestroId",
+      ],
+    }),
+  ]);
+
+  if (!alumno) {
+    return {
+      status: 404,
+      msg: "Alumno no encontrado",
+    };
+  }
+
+  if (!grado) {
+    return {
+      status: 404,
+      msg: "Grupo no encontrado",
+    };
+  }
+
+  if (
+    role === ROLES.MAESTRO &&
+    Number(grado.maestroId) !== Number(userId)
+  ) {
+    return {
+      status: 403,
+      msg: "No puedes administrar incidencias en otro grupo",
+    };
+  }
+
+  const pertenece = await alumnoPerteneceAlGrado(
+    alumnoId,
+    gradoId,
+  );
+
+  if (!pertenece) {
+    return {
+      status: 400,
+      msg: "El alumno no pertenece al grupo seleccionado",
+    };
+  }
+
   return null;
 };
 
+/**
+ * Valida cadenas obligatorias y su longitud máxima.
+ */
+const validarTextoObligatorio = (
+  valor,
+  nombre,
+  longitudMaxima,
+) => {
+  if (typeof valor !== "string" || !valor.trim()) {
+    return `${nombre} es obligatorio`;
+  }
+
+  if (
+    longitudMaxima &&
+    valor.trim().length > longitudMaxima
+  ) {
+    return `${nombre} no puede superar ${longitudMaxima} caracteres`;
+  }
+
+  return null;
+};
+
+/**
+ * GET /incidencias
+ *
+ * Administrador: consulta todas.
+ * Maestro: consulta las incidencias de sus grupos.
+ * Alumno: consulta solamente sus incidencias.
+ */
 export const getIncidencias = async (req, res) => {
   try {
     const { role, userId } = req;
     const where = {};
+
+    let gradosIdsDelMaestro = [];
 
     if (role === ROLES.ALUMNO) {
       const perfil = await obtenerPerfilAlumno(userId);
@@ -136,18 +327,28 @@ export const getIncidencias = async (req, res) => {
           msg: "Perfil de alumno no encontrado",
         });
       }
+
       where.alumnoId = perfil.id;
     } else if (role === ROLES.MAESTRO) {
-      const alumnosIds = await obtenerAlumnoIdsDelMaestro(userId);
-      where.alumnoId = { [Op.in]: alumnosIds };
+      gradosIdsDelMaestro =
+        await obtenerGradosIdsDelMaestro(userId);
+
+      where.gradoId = {
+        [Op.in]: gradosIdsDelMaestro,
+      };
     } else if (role !== ROLES.ADMINISTRADOR) {
       return res.status(403).json({
         msg: "No tienes permiso para consultar incidencias",
       });
     }
 
+    /*
+     * Filtro por alumno
+     */
     if (req.query.alumnoId !== undefined) {
-      const alumnoId = enteroPositivo(req.query.alumnoId);
+      const alumnoId = enteroPositivo(
+        req.query.alumnoId,
+      );
 
       if (!alumnoId) {
         return res.status(400).json({
@@ -164,26 +365,82 @@ export const getIncidencias = async (req, res) => {
         });
       }
 
-      if (
-        role === ROLES.MAESTRO &&
-        !(await maestroPuedeGestionarAlumno(userId, alumnoId))
-      ) {
-        return res.status(403).json({
-          msg: "El alumno no pertenece a uno de tus grupos",
-        });
-      }
-
       where.alumnoId = alumnoId;
     }
 
-    const { desde, hasta } = req.query;
+    /*
+     * Filtro por grupo
+     */
+    if (req.query.gradoId !== undefined) {
+      const gradoId = enteroPositivo(
+        req.query.gradoId,
+      );
 
-    if (desde !== undefined && !esFechaValida(desde)) {
-      return res.status(400).json({ msg: "La fecha desde no es válida" });
+      if (!gradoId) {
+        return res.status(400).json({
+          msg: "El gradoId no es válido",
+        });
+      }
+
+      if (
+        role === ROLES.MAESTRO &&
+        !gradosIdsDelMaestro.includes(gradoId)
+      ) {
+        return res.status(403).json({
+          msg: "No puedes consultar incidencias de otro grupo",
+        });
+      }
+
+      where.gradoId = gradoId;
     }
 
-    if (hasta !== undefined && !esFechaValida(hasta)) {
-      return res.status(400).json({ msg: "La fecha hasta no es válida" });
+    /*
+     * Filtro por maestro creador
+     */
+    if (req.query.maestroId !== undefined) {
+      const maestroId = enteroPositivo(
+        req.query.maestroId,
+      );
+
+      if (!maestroId) {
+        return res.status(400).json({
+          msg: "El maestroId no es válido",
+        });
+      }
+
+      if (
+        role !== ROLES.ADMINISTRADOR &&
+        Number(userId) !== maestroId
+      ) {
+        return res.status(403).json({
+          msg: "No puedes filtrar incidencias de otro maestro",
+        });
+      }
+
+      where.maestroId = maestroId;
+    }
+
+    /*
+     * Filtros por fecha
+     */
+    const { desde, hasta } = req.query;
+
+    if (
+      desde !== undefined &&
+      !esFechaValida(desde)
+    ) {
+      return res.status(400).json({
+        msg: "La fecha desde no es válida",
+      });
+    }
+
+    if (
+      hasta !== undefined &&
+      !esFechaValida(hasta)
+    ) {
+      return res.status(400).json({
+        msg: "La fecha hasta no es válida",
+      });
     }
 
     if (desde && hasta && desde > hasta) {
@@ -193,13 +450,25 @@ export const getIncidencias = async (req, res) => {
     }
 
     if (desde && hasta) {
-      where.fecha = { [Op.between]: [desde, hasta] };
+      where.fecha = {
+        [Op.between]: [
+          desde,
+          hasta,
+        ],
+      };
     } else if (desde) {
-      where.fecha = { [Op.gte]: desde };
+      where.fecha = {
+        [Op.gte]: desde,
+      };
     } else if (hasta) {
-      where.fecha = { [Op.lte]: hasta };
+      where.fecha = {
+        [Op.lte]: hasta,
+      };
     }
 
+    /*
+     * Filtro por tipo
+     */
     if (
       typeof req.query.tipo === "string" &&
       req.query.tipo.trim()
@@ -210,7 +479,7 @@ export const getIncidencias = async (req, res) => {
     const lista = await Incidencia.findAll({
       where,
       attributes: atributos,
-      include: [incluirAlumno],
+      include: relaciones,
       order: [
         ["fecha", "DESC"],
         ["id", "DESC"],
@@ -219,22 +488,33 @@ export const getIncidencias = async (req, res) => {
 
     return res.status(200).json(lista);
   } catch (error) {
-    console.error("Error al obtener incidencias:", error);
+    console.error(
+      "Error al obtener incidencias:",
+      error,
+    );
+
     return res.status(500).json({
       msg: "No fue posible obtener las incidencias",
     });
   }
 };
 
+/**
+ * GET /incidencias/:id
+ */
 export const getIncidenciasById = async (req, res) => {
   try {
-    const incidencia = await buscarIncidencia(req.params.id);
+    const incidencia = await buscarIncidencia(
+      req.params.id,
+    );
 
     if (!incidencia) {
-      return res.status(404).json({ msg: "Incidencia no encontrada" });
+      return res.status(404).json({
+        msg: "Incidencia no encontrada",
+      });
     }
 
-    const errorAcceso = await validarAcceso(
+    const errorAcceso = await validarAccesoLectura(
       incidencia,
       req.role,
       req.userId,
@@ -243,53 +523,86 @@ export const getIncidenciasById = async (req, res) => {
     if (errorAcceso) {
       return res
         .status(errorAcceso.status)
-        .json({ msg: errorAcceso.msg });
+        .json({
+          msg: errorAcceso.msg,
+        });
     }
 
     return res.status(200).json(incidencia);
   } catch (error) {
-    console.error("Error al obtener incidencia:", error);
+    console.error(
+      "Error al obtener incidencia:",
+      error,
+    );
+
     return res.status(500).json({
       msg: "No fue posible obtener la incidencia",
     });
   }
 };
 
+/**
+ * POST /incidencias
+ */
 export const createIncidencias = async (req, res) => {
   try {
     const { tipo, descripcion } = req.body;
-    const fecha = req.body.fecha || hoy();
-    const alumnoId = enteroPositivo(req.body.alumnoId);
 
-    if (typeof tipo !== "string" || !tipo.trim()) {
+    const fecha =
+      req.body.fecha || fechaHoyMonterrey();
+
+    const alumnoId = enteroPositivo(
+      req.body.alumnoId,
+    );
+
+    const gradoId = enteroPositivo(
+      req.body.gradoId,
+    );
+
+    const errorTipo = validarTextoObligatorio(
+      tipo,
+      "El tipo de incidencia",
+      100,
+    );
+
+    if (errorTipo) {
       return res.status(400).json({
-        msg: "El tipo de incidencia es obligatorio",
+        msg: errorTipo,
       });
     }
 
-    if (
-      typeof descripcion !== "string" ||
-      !descripcion.trim()
-    ) {
+    const errorDescripcion =
+      validarTextoObligatorio(
+        descripcion,
+        "La descripción",
+      );
+
+    if (errorDescripcion) {
       return res.status(400).json({
-        msg: "La descripción es obligatoria",
+        msg: errorDescripcion,
       });
     }
 
     if (!esFechaValida(fecha)) {
-      return res.status(400).json({ msg: "La fecha no es válida" });
+      return res.status(400).json({
+        msg: "La fecha no es válida",
+      });
     }
 
-    const errorAlumno = await validarAlumnoParaStaff(
-      alumnoId,
-      req.role,
-      req.userId,
-    );
+    const errorDestino =
+      await validarAlumnoYGradoParaStaff({
+        alumnoId,
+        gradoId,
+        role: req.role,
+        userId: req.userId,
+      });
 
-    if (errorAlumno) {
+    if (errorDestino) {
       return res
-        .status(errorAlumno.status)
-        .json({ msg: errorAlumno.msg });
+        .status(errorDestino.status)
+        .json({
+          msg: errorDestino.msg,
+        });
     }
 
     const creada = await Incidencia.create({
@@ -297,39 +610,49 @@ export const createIncidencias = async (req, res) => {
       descripcion: descripcion.trim(),
       fecha,
       alumnoId,
+      gradoId,
+
+      // El maestroId no debe recibirse desde el frontend.
+      // Se obtiene del usuario autenticado.
+      maestroId: req.userId,
     });
-    const incidencia = await buscarIncidencia(creada.uuid);
+
+    const incidencia = await buscarIncidencia(
+      creada.uuid,
+    );
 
     return res.status(201).json({
       msg: "Incidencia creada correctamente",
       incidencia,
     });
   } catch (error) {
-    console.error("Error al crear incidencia:", error);
+    console.error(
+      "Error al crear incidencia:",
+      error,
+    );
+
     return res.status(500).json({
       msg: "No fue posible crear la incidencia",
     });
   }
 };
 
+/**
+ * PATCH /incidencias/:id
+ */
 export const updateIncidencias = async (req, res) => {
   try {
-    const incidencia = await buscarIncidencia(req.params.id);
+    const incidencia = await buscarIncidencia(
+      req.params.id,
+    );
 
     if (!incidencia) {
-      return res.status(404).json({ msg: "Incidencia no encontrada" });
-    }
-
-    if (
-      req.role !== ROLES.ADMINISTRADOR &&
-      req.role !== ROLES.MAESTRO
-    ) {
-      return res.status(403).json({
-        msg: "No tienes permiso para actualizar incidencias",
+      return res.status(404).json({
+        msg: "Incidencia no encontrada",
       });
     }
 
-    const errorAcceso = await validarAcceso(
+    const errorAcceso = await validarAccesoEscritura(
       incidencia,
       req.role,
       req.userId,
@@ -338,103 +661,169 @@ export const updateIncidencias = async (req, res) => {
     if (errorAcceso) {
       return res
         .status(errorAcceso.status)
-        .json({ msg: errorAcceso.msg });
+        .json({
+          msg: errorAcceso.msg,
+        });
     }
 
-    if (Object.keys(req.body).length === 0) {
+    /*
+     * El maestro creador no se puede modificar.
+     */
+    if (req.body.maestroId !== undefined) {
       return res.status(400).json({
-        msg: "No se proporcionaron datos para actualizar",
+        msg: "El maestro creador de la incidencia no se puede cambiar",
+      });
+    }
+
+    const camposPermitidos = [
+      "tipo",
+      "descripcion",
+      "fecha",
+      "alumnoId",
+      "gradoId",
+    ];
+
+    const tieneCamposPermitidos =
+      camposPermitidos.some(
+        (campo) => req.body[campo] !== undefined,
+      );
+
+    if (!tieneCamposPermitidos) {
+      return res.status(400).json({
+        msg: "No se proporcionaron datos válidos para actualizar",
       });
     }
 
     const updateData = {};
 
+    /*
+     * Validar tipo
+     */
     if (req.body.tipo !== undefined) {
-      if (
-        typeof req.body.tipo !== "string" ||
-        !req.body.tipo.trim()
-      ) {
+      const errorTipo = validarTextoObligatorio(
+        req.body.tipo,
+        "El tipo de incidencia",
+        100,
+      );
+
+      if (errorTipo) {
         return res.status(400).json({
-          msg: "El tipo de incidencia es obligatorio",
+          msg: errorTipo,
         });
       }
+
       updateData.tipo = req.body.tipo.trim();
     }
 
+    /*
+     * Validar descripción
+     */
     if (req.body.descripcion !== undefined) {
-      if (
-        typeof req.body.descripcion !== "string" ||
-        !req.body.descripcion.trim()
-      ) {
+      const errorDescripcion =
+        validarTextoObligatorio(
+          req.body.descripcion,
+          "La descripción",
+        );
+
+      if (errorDescripcion) {
         return res.status(400).json({
-          msg: "La descripción es obligatoria",
+          msg: errorDescripcion,
         });
       }
-      updateData.descripcion = req.body.descripcion.trim();
+
+      updateData.descripcion =
+        req.body.descripcion.trim();
     }
 
+    /*
+     * Validar fecha
+     */
     if (req.body.fecha !== undefined) {
       if (!esFechaValida(req.body.fecha)) {
-        return res.status(400).json({ msg: "La fecha no es válida" });
+        return res.status(400).json({
+          msg: "La fecha no es válida",
+        });
       }
+
       updateData.fecha = req.body.fecha;
     }
 
-    if (req.body.alumnoId !== undefined) {
-      const alumnoId = enteroPositivo(req.body.alumnoId);
-      const errorAlumno = await validarAlumnoParaStaff(
-        alumnoId,
-        req.role,
-        req.userId,
-      );
+    /*
+     * Si no se recibe alumnoId o gradoId,
+     * conserva los valores actuales.
+     */
+    const alumnoId =
+      req.body.alumnoId !== undefined
+        ? enteroPositivo(req.body.alumnoId)
+        : Number(incidencia.alumnoId);
 
-      if (errorAlumno) {
-        return res
-          .status(errorAlumno.status)
-          .json({ msg: errorAlumno.msg });
-      }
+    const gradoId =
+      req.body.gradoId !== undefined
+        ? enteroPositivo(req.body.gradoId)
+        : Number(incidencia.gradoId);
+
+    const errorDestino =
+      await validarAlumnoYGradoParaStaff({
+        alumnoId,
+        gradoId,
+        role: req.role,
+        userId: req.userId,
+      });
+
+    if (errorDestino) {
+      return res
+        .status(errorDestino.status)
+        .json({
+          msg: errorDestino.msg,
+        });
+    }
+
+    if (req.body.alumnoId !== undefined) {
       updateData.alumnoId = alumnoId;
     }
 
-    if (Object.keys(updateData).length === 0) {
-      return res.status(400).json({
-        msg: "No se proporcionaron campos válidos para actualizar",
-      });
+    if (req.body.gradoId !== undefined) {
+      updateData.gradoId = gradoId;
     }
 
     await incidencia.update(updateData);
-    const actualizada = await buscarIncidencia(incidencia.uuid);
+
+    const actualizada = await buscarIncidencia(
+      incidencia.uuid,
+    );
 
     return res.status(200).json({
       msg: "Incidencia actualizada correctamente",
       incidencia: actualizada,
     });
   } catch (error) {
-    console.error("Error al actualizar incidencia:", error);
+    console.error(
+      "Error al actualizar incidencia:",
+      error,
+    );
+
     return res.status(500).json({
       msg: "No fue posible actualizar la incidencia",
     });
   }
 };
 
+/**
+ * DELETE /incidencias/:id
+ */
 export const deleteIncidencias = async (req, res) => {
   try {
-    const incidencia = await buscarIncidencia(req.params.id);
+    const incidencia = await buscarIncidencia(
+      req.params.id,
+    );
 
     if (!incidencia) {
-      return res.status(404).json({ msg: "Incidencia no encontrada" });
-    }
-
-    if (
-      req.role !== ROLES.ADMINISTRADOR &&
-      req.role !== ROLES.MAESTRO
-    ) {
-      return res.status(403).json({
-        msg: "No tienes permiso para eliminar incidencias",
+      return res.status(404).json({
+        msg: "Incidencia no encontrada",
       });
     }
 
-    const errorAcceso = await validarAcceso(
+    const errorAcceso = await validarAccesoEscritura(
       incidencia,
       req.role,
       req.userId,
@@ -443,7 +832,9 @@ export const deleteIncidencias = async (req, res) => {
     if (errorAcceso) {
       return res
         .status(errorAcceso.status)
-        .json({ msg: errorAcceso.msg });
+        .json({
+          msg: errorAcceso.msg,
+        });
     }
 
     await incidencia.destroy();
@@ -452,7 +843,11 @@ export const deleteIncidencias = async (req, res) => {
       msg: "Incidencia eliminada correctamente",
     });
   } catch (error) {
-    console.error("Error al eliminar incidencia:", error);
+    console.error(
+      "Error al eliminar incidencia:",
+      error,
+    );
+
     return res.status(500).json({
       msg: "No fue posible eliminar la incidencia",
     });

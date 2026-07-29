@@ -249,13 +249,19 @@ export const updateGrados = async (req, res) => {
       });
     }
 
-    const grado = await Grados.findOne({
-      where: { uuid: req.params.id },
-    });
+   const grado = await Grados.findOne({
+  where: {
+    id: incidencia.gradoId,
+    maestroId: userId,
+  },
+});
 
-    if (!grado) {
-      return res.status(404).json({ msg: "Grupo no encontrado" });
-    }
+if (!grado) {
+  return {
+    status: 403,
+    msg: "Esta incidencia no pertenece a uno de tus grupos",
+  };
+}
 
     const updateData = {};
 
