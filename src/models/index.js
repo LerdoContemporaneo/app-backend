@@ -125,21 +125,29 @@ Alumnos.hasMany(Reportes, {
 Incidencia.belongsTo(Grados, {
   foreignKey: "gradoId",
   as: "grado",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
 });
 
 Grados.hasMany(Incidencia, {
   foreignKey: "gradoId",
   as: "incidencias",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
 });
 
 Incidencia.belongsTo(Users, {
   foreignKey: "maestroId",
   as: "maestro",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
 });
 
 Users.hasMany(Incidencia, {
   foreignKey: "maestroId",
   as: "incidenciasCreadas",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
 });
 
 Reportes.belongsTo(Alumnos, {

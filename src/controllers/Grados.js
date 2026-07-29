@@ -249,18 +249,16 @@ export const updateGrados = async (req, res) => {
       });
     }
 
-   const grado = await Grados.findOne({
+const grado = await Grados.findOne({
   where: {
-    id: incidencia.gradoId,
-    maestroId: userId,
+    uuid: req.params.id,
   },
 });
 
 if (!grado) {
-  return {
-    status: 403,
-    msg: "Esta incidencia no pertenece a uno de tus grupos",
-  };
+  return res.status(404).json({
+    msg: "Grupo no encontrado",
+  });
 }
 
     const updateData = {};
@@ -348,13 +346,19 @@ export const deleteGrados = async (req, res) => {
       return res.status(404).json({ msg: "Grupo no encontrado" });
     }
 
-    const [alumnos, asistencias, reportes, tareas] =
-      await Promise.all([
-        grado.countAlumnos(),
-        grado.countAsistencias(),
-        grado.countReportes(),
-        grado.countTareas(),
-      ]);
+   const [
+  alumnos,
+  asistencias,
+  incidencias,
+  reportes,
+  tareas,
+] = await Promise.all([
+  grado.countAlumnos(),
+  grado.countAsistencias(),
+  grado.countIncidencias(),
+  grado.countReportes(),
+  grado.countTareas(),
+]);
 
     if (alumnos || asistencias || reportes || tareas) {
       return res.status(409).json({
