@@ -21,12 +21,9 @@ const Tareas = db.define("tareas",
       },
     },
     descripcion: {
-      type: DataTypes.TEXT,
-     descripcion: descripcion?.trim() || null,
-      validate: {
-        notEmpty: true,
-      },
-    },
+  type: DataTypes.TEXT,
+  allowNull: true,
+},
     fechaAsignacion: { 
       type: DataTypes.DATEONLY,
       allowNull: false,
