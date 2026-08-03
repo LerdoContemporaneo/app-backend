@@ -108,6 +108,27 @@ const maestroGestionaGrado = async (maestroId, gradoId) => {
 };
 
 /**
+ * Obtiene los grupos en los que está inscrito un alumno.
+ */
+const obtenerGradosIdsDelAlumno = async (alumnoId) => {
+  const grados = await Grados.findAll({
+    attributes: ["id"],
+    include: [
+      {
+        model: Alumnos,
+        as: "alumnos",
+        attributes: [],
+        where: { id: alumnoId },
+        through: { attributes: [] },
+        required: true,
+      },
+    ],
+  });
+
+  return grados.map((grado) => Number(grado.id));
+};
+
+/**
  * Valida los permisos para consultar una incidencia.
  */
 const validarAccesoLectura = async (
@@ -138,10 +159,25 @@ const validarAccesoLectura = async (
   if (role === ROLES.ALUMNO) {
     const perfil = await obtenerPerfilAlumno(userId);
 
-    if (
-      perfil &&
-      Number(perfil.id) === Number(incidencia.alumnoId)
-    ) {
+    if (!perfil) {
+      return {
+        status: 404,
+        msg: "Perfil de alumno no encontrado",
+      };
+    }
+
+    const esIndividual =
+      incidencia.alumnoId !== null &&
+      Number(perfil.id) === Number(incidencia.alumnoId);
+
+    const esGrupal =
+      incidencia.alumnoId === null &&
+      (await alumnoPerteneceAlGrado(
+        perfil.id,
+        incidencia.gradoId,
+      ));
+
+    if (esIndividual || esGrupal) {
       return null;
     }
 
@@ -199,8 +235,8 @@ const validarAccesoEscritura = async (
 };
 
 /**
- * Valida que existan el alumno y el grupo, que estén
- * relacionados y que el maestro tenga acceso al grupo.
+ * Valida el grupo, el acceso del maestro y, cuando la
+ * incidencia es individual, la pertenencia del alumno.
  */
 const validarAlumnoYGradoParaStaff = async ({
   alumnoId,
@@ -218,13 +254,6 @@ const validarAlumnoYGradoParaStaff = async ({
     };
   }
 
-  if (!alumnoId) {
-    return {
-      status: 400,
-      msg: "El alumno es obligatorio",
-    };
-  }
-
   if (!gradoId) {
     return {
       status: 400,
@@ -233,9 +262,11 @@ const validarAlumnoYGradoParaStaff = async ({
   }
 
   const [alumno, grado] = await Promise.all([
-    Alumnos.findByPk(alumnoId, {
-      attributes: ["id"],
-    }),
+    alumnoId === null
+      ? Promise.resolve(null)
+      : Alumnos.findByPk(alumnoId, {
+          attributes: ["id"],
+        }),
     Grados.findByPk(gradoId, {
       attributes: [
         "id",
@@ -244,7 +275,7 @@ const validarAlumnoYGradoParaStaff = async ({
     }),
   ]);
 
-  if (!alumno) {
+  if (alumnoId !== null && !alumno) {
     return {
       status: 404,
       msg: "Alumno no encontrado",
@@ -268,16 +299,18 @@ const validarAlumnoYGradoParaStaff = async ({
     };
   }
 
-  const pertenece = await alumnoPerteneceAlGrado(
-    alumnoId,
-    gradoId,
-  );
+  if (alumnoId !== null) {
+    const pertenece = await alumnoPerteneceAlGrado(
+      alumnoId,
+      gradoId,
+    );
 
-  if (!pertenece) {
-    return {
-      status: 400,
-      msg: "El alumno no pertenece al grupo seleccionado",
-    };
+    if (!pertenece) {
+      return {
+        status: 400,
+        msg: "El alumno no pertenece al grupo seleccionado",
+      };
+    }
   }
 
   return null;
@@ -318,6 +351,7 @@ export const getIncidencias = async (req, res) => {
     const where = {};
 
     let gradosIdsDelMaestro = [];
+    let gradosIdsDelAlumno = [];
 
     if (role === ROLES.ALUMNO) {
       const perfil = await obtenerPerfilAlumno(userId);
@@ -328,7 +362,18 @@ export const getIncidencias = async (req, res) => {
         });
       }
 
-      where.alumnoId = perfil.id;
+      gradosIdsDelAlumno =
+        await obtenerGradosIdsDelAlumno(perfil.id);
+
+      where[Op.or] = [
+        { alumnoId: perfil.id },
+        {
+          alumnoId: null,
+          gradoId: {
+            [Op.in]: gradosIdsDelAlumno,
+          },
+        },
+      ];
     } else if (role === ROLES.MAESTRO) {
       gradosIdsDelMaestro =
         await obtenerGradosIdsDelMaestro(userId);
@@ -385,6 +430,15 @@ export const getIncidencias = async (req, res) => {
       if (
         role === ROLES.MAESTRO &&
         !gradosIdsDelMaestro.includes(gradoId)
+      ) {
+        return res.status(403).json({
+          msg: "No puedes consultar incidencias de otro grupo",
+        });
+      }
+
+      if (
+        role === ROLES.ALUMNO &&
+        !gradosIdsDelAlumno.includes(gradoId)
       ) {
         return res.status(403).json({
           msg: "No puedes consultar incidencias de otro grupo",
@@ -551,13 +605,20 @@ export const createIncidencias = async (req, res) => {
     const fecha =
       req.body.fecha || fechaHoyMonterrey();
 
-    const alumnoId = enteroPositivo(
-      req.body.alumnoId,
-    );
+    const alumnoId =
+      req.body.alumnoId === null
+        ? null
+        : enteroPositivo(req.body.alumnoId);
 
     const gradoId = enteroPositivo(
       req.body.gradoId,
     );
+
+    if (req.body.alumnoId !== null && !alumnoId) {
+      return res.status(400).json({
+        msg: "El alumnoId debe ser un entero positivo o null para una incidencia grupal",
+      });
+    }
 
     const errorTipo = validarTextoObligatorio(
       tipo,
@@ -752,10 +813,27 @@ export const updateIncidencias = async (req, res) => {
      * Si no se recibe alumnoId o gradoId,
      * conserva los valores actuales.
      */
-    const alumnoId =
-      req.body.alumnoId !== undefined
-        ? enteroPositivo(req.body.alumnoId)
+    const alumnoIdActual =
+      incidencia.alumnoId === null
+        ? null
         : Number(incidencia.alumnoId);
+
+    const alumnoId =
+      req.body.alumnoId === undefined
+        ? alumnoIdActual
+        : req.body.alumnoId === null
+          ? null
+          : enteroPositivo(req.body.alumnoId);
+
+    if (
+      req.body.alumnoId !== undefined &&
+      req.body.alumnoId !== null &&
+      !alumnoId
+    ) {
+      return res.status(400).json({
+        msg: "El alumnoId debe ser un entero positivo o null para una incidencia grupal",
+      });
+    }
 
     const gradoId =
       req.body.gradoId !== undefined

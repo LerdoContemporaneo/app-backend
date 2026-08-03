@@ -44,7 +44,8 @@ const Incidencia = db.define(
 
     alumnoId: {
       type: DataTypes.INTEGER.UNSIGNED,
-      allowNull: false,
+      // Una incidencia sin alumnoId aplica al grupo completo.
+      allowNull: true,
       validate: {
         isInt: true,
         min: 1,
