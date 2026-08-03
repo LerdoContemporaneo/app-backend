@@ -418,12 +418,17 @@ export const updateAlumnosDelGrado = async (req, res) => {
     await transaction.rollback();
   }
 
-  console.error("Error al actualizar alumnos del grupo:", error);
+  console.error("Error al actualizar alumnos del grupo:", {
+    name: error?.name,
+    message: error?.message,
+    sqlMessage: error?.original?.sqlMessage,
+    sql: error?.sql,
+  });
 
   return res.status(500).json({
     msg:
-      error?.parent?.sqlMessage ||
       error?.original?.sqlMessage ||
+      error?.parent?.sqlMessage ||
       error?.message ||
       "No fue posible actualizar los alumnos del grupo",
   });

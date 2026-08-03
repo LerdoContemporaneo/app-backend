@@ -36,10 +36,7 @@ Grados.belongsTo(Users, {
 });
 
 Alumnos.belongsToMany(Grados, {
-  through: {
-    model: "alumnos_grados",
-    timestamps: false,
-  },
+  through: "alumnos_grados",
   foreignKey: "alumnoId",
   otherKey: "gradoId",
   as: "grados",
@@ -48,10 +45,7 @@ Alumnos.belongsToMany(Grados, {
 });
 
 Grados.belongsToMany(Alumnos, {
-  through: {
-    model: "alumnos_grados",
-    timestamps: false,
-  },
+  through: "alumnos_grados",
   foreignKey: "gradoId",
   otherKey: "alumnoId",
   as: "alumnos",
