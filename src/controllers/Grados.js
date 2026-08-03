@@ -414,19 +414,20 @@ export const updateAlumnosDelGrado = async (req, res) => {
       totalAlumnos: alumnoIds.length,
     });
   } catch (error) {
-    if (!transaction.finished) {
-      await transaction.rollback();
-    }
-
-    console.error(
-      "Error al actualizar alumnos del grupo:",
-      error
-    );
-
-    return res.status(500).json({
-      msg: "No fue posible actualizar los alumnos del grupo",
-    });
+  if (!transaction.finished) {
+    await transaction.rollback();
   }
+
+  console.error("Error al actualizar alumnos del grupo:", error);
+
+  return res.status(500).json({
+    msg:
+      error?.parent?.sqlMessage ||
+      error?.original?.sqlMessage ||
+      error?.message ||
+      "No fue posible actualizar los alumnos del grupo",
+  });
+}
 };
 
 
