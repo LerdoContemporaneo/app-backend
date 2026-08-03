@@ -417,7 +417,7 @@ export const updateAlumnosDelGrado = async (req, res) => {
       msg: "Alumnos del grupo actualizados correctamente",
       totalAlumnos: alumnoIds.length,
     });
-  }   } catch (error) {
+  } catch (error) {
     if (transaction && !transaction.finished) {
       await transaction.rollback();
     }
@@ -430,8 +430,7 @@ export const updateAlumnosDelGrado = async (req, res) => {
         error?.message ||
         "No fue posible actualizar los alumnos del grupo",
     });
-  }
-
+}
 };
 
 
