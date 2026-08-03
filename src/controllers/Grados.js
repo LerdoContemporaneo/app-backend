@@ -330,6 +330,106 @@ if (!grado) {
   }
 };
 
+export const updateAlumnosDelGrado = async (req, res) => {
+  const transaction = await db.transaction();
+
+  try {
+    const grado = await Grados.findOne({
+      where: {
+        uuid: req.params.id,
+      },
+      transaction,
+    });
+
+    if (!grado) {
+      await transaction.rollback();
+
+      return res.status(404).json({
+        msg: "Grupo no encontrado",
+      });
+    }
+
+    if (!grado.maestroId) {
+      await transaction.rollback();
+
+      return res.status(409).json({
+        msg: "Asigna un maestro responsable antes de inscribir alumnos",
+      });
+    }
+
+    if (!Array.isArray(req.body.alumnoIds)) {
+      await transaction.rollback();
+
+      return res.status(400).json({
+        msg: "alumnoIds debe ser un arreglo",
+      });
+    }
+
+    const alumnoIds = [
+      ...new Set(
+        req.body.alumnoIds.map((id) => Number(id))
+      ),
+    ];
+
+    const idsInvalidos = alumnoIds.some(
+      (id) => !Number.isInteger(id) || id <= 0
+    );
+
+    if (idsInvalidos) {
+      await transaction.rollback();
+
+      return res.status(400).json({
+        msg: "Uno o más alumnos seleccionados no son válidos",
+      });
+    }
+
+    if (alumnoIds.length > 0) {
+      const alumnos = await Alumnos.findAll({
+        where: {
+          id: {
+            [Op.in]: alumnoIds,
+          },
+        },
+        attributes: ["id"],
+        transaction,
+      });
+
+      if (alumnos.length !== alumnoIds.length) {
+        await transaction.rollback();
+
+        return res.status(400).json({
+          msg: "Uno o más alumnos seleccionados no existen",
+        });
+      }
+    }
+
+    await grado.setAlumnos(alumnoIds, {
+      transaction,
+    });
+
+    await transaction.commit();
+
+    return res.status(200).json({
+      msg: "Alumnos del grupo actualizados correctamente",
+      totalAlumnos: alumnoIds.length,
+    });
+  } catch (error) {
+    if (!transaction.finished) {
+      await transaction.rollback();
+    }
+
+    console.error(
+      "Error al actualizar alumnos del grupo:",
+      error
+    );
+
+    return res.status(500).json({
+      msg: "No fue posible actualizar los alumnos del grupo",
+    });
+  }
+};
+
+
 export const deleteGrados = async (req, res) => {
   try {
     if (req.role !== ROLES.ADMINISTRADOR) {

@@ -4,6 +4,7 @@ import {
   deleteGrados,
   getGrados,
   getGradosById,
+   updateAlumnosDelGrado,
   updateGrados,
 } from "../controllers/Grados.js";
 import {
@@ -17,6 +18,12 @@ router.get("/grados", verifyUser, getGrados);
 router.get("/grados/:id", verifyUser, getGradosById);
 router.post("/grados", verifyUser, adminOnly, createGrados);
 router.patch("/grados/:id", verifyUser, adminOnly, updateGrados);
+router.put(
+  "/grados/:id/alumnos",
+  verifyUser,
+  adminOnly,
+  updateAlumnosDelGrado
+);
 router.delete("/grados/:id", verifyUser, adminOnly, deleteGrados);
 
 export default router;
