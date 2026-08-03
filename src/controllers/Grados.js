@@ -1,8 +1,10 @@
-import {
+import db, {
   Alumnos,
   Grados,
   Users,
 } from "../models/index.js";
+
+import { Op } from "sequelize";
 import {
   ROLES,
   enteroPositivo,
@@ -331,9 +333,11 @@ if (!grado) {
 };
 
 export const updateAlumnosDelGrado = async (req, res) => {
-  const transaction = await db.transaction();
+  let transaction;
 
   try {
+    transaction = await db.transaction();
+
     const grado = await Grados.findOne({
       where: {
         uuid: req.params.id,
@@ -413,26 +417,21 @@ export const updateAlumnosDelGrado = async (req, res) => {
       msg: "Alumnos del grupo actualizados correctamente",
       totalAlumnos: alumnoIds.length,
     });
-  } catch (error) {
-  if (!transaction.finished) {
-    await transaction.rollback();
+  }   } catch (error) {
+    if (transaction && !transaction.finished) {
+      await transaction.rollback();
+    }
+
+    console.error("Error al actualizar alumnos del grupo:", error);
+
+    return res.status(500).json({
+      msg:
+        error?.original?.sqlMessage ||
+        error?.message ||
+        "No fue posible actualizar los alumnos del grupo",
+    });
   }
 
-  console.error("Error al actualizar alumnos del grupo:", {
-    name: error?.name,
-    message: error?.message,
-    sqlMessage: error?.original?.sqlMessage,
-    sql: error?.sql,
-  });
-
-  return res.status(500).json({
-    msg:
-      error?.original?.sqlMessage ||
-      error?.parent?.sqlMessage ||
-      error?.message ||
-      "No fue posible actualizar los alumnos del grupo",
-  });
-}
 };
 
 
