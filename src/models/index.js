@@ -8,6 +8,26 @@ import AsistenciaMaestro from "./AsistenciaMaestroModel.js";
 import Incidencia from "./IncidenciaModel.js";
 import Reportes from "./ReportesModel.js";
 import Tareas from "./TareasModel.js";
+import NivelEducativo from "./NivelEducativoModel.js";
+import UsuarioNivel from "./UsuarioNivelModel.js";
+
+Users.belongsToMany(NivelEducativo, {
+  through: UsuarioNivel,
+  foreignKey: "userId",
+  otherKey: "nivelId",
+  as: "niveles",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+
+NivelEducativo.belongsToMany(Users, {
+  through: UsuarioNivel,
+  foreignKey: "nivelId",
+  otherKey: "userId",
+  as: "usuarios",
+  onDelete: "RESTRICT",
+  onUpdate: "CASCADE",
+});
 
 Users.hasOne(Alumnos, {
   foreignKey: "userId",
@@ -64,6 +84,20 @@ AsistenciaMaestro.belongsTo(Users, {
   foreignKey: "maestroId",
   as: "maestro",
   onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+
+Grados.hasMany(AsistenciaMaestro, {
+  foreignKey: "gradoId",
+  as: "asistenciasMaestro",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+
+AsistenciaMaestro.belongsTo(Grados, {
+  foreignKey: "gradoId",
+  as: "grado",
+  onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
 
@@ -204,6 +238,8 @@ export {
   Incidencia,
   Reportes,
   Tareas,
+  NivelEducativo,
+  UsuarioNivel,
 };
 
 export default db;
